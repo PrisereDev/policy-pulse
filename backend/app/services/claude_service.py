@@ -101,6 +101,171 @@ Return ONLY the JSON object, no additional text or explanation.
 """
         return prompt
     
+    def endorsement_prompt(self, policy_text: str) -> str:
+        prompt = """You are an insurance underwriting analyst AI.
+
+        Your task is to read a commercial insurance policy document and:
+
+        1) Extract structured policy and business data
+        2) Identify coverage gaps and operational risk dependencies
+        3) Recommend appropriate endorsements
+        4) Justify each recommendation using evidence from the document
+
+        IMPORTANT RULES:
+        - Do NOT summarize the document.
+        - Extract factual data first.
+        - Then perform risk analysis.
+        - If information is missing, mark as "UNKNOWN" — do not guess. Do not make up numbers.
+        - Output ONLY valid JSON.
+
+        -----------------------------
+        STEP 1 — POLICY DATA EXTRACTION
+        -----------------------------
+
+        Extract the following:
+
+        {
+        "policy_metadata": {
+            "policy_type": "",
+            "named_insured": "",
+            "effective_dates": "",
+            "locations_insured": [],
+            "industry_description": "",
+            "naics_or_class_code": ""
+        },
+
+        "coverages_present": {
+            "property": true/false,
+            "general_liability": true/false,
+            "business_interruption": true/false,
+            "extra_expense": true/false,
+            "equipment_breakdown": true/false,
+            "cyber": true/false,
+            "flood": true/false,
+            "earthquake": true/false
+        },
+
+        "limits_and_deductibles": {
+            "property_limit": "",
+            "liability_limit": "",
+            "business_interruption_limit": "",
+            "deductibles": "",
+            "waiting_period_bi": ""
+        },
+
+        "sublimits": {
+            "spoilage": "",
+            "electronics": "",
+            "signage": "",
+            "other": []
+        },
+
+        "exclusions_detected": [],
+
+        "endorsements_already_attached": []
+        }
+
+        -----------------------------
+        STEP 2 — BUSINESS OPERATIONS SIGNALS
+        -----------------------------
+
+        From descriptions, forms, or schedules, infer:
+
+        {
+        "operational_risk_factors": {
+            "handles_perishable_goods": true/false/UNKNOWN,
+            "relies_on_refrigeration": true/false/UNKNOWN,
+            "hosts_events_or_depends_on_events": true/false/UNKNOWN,
+            "provides_professional_services_or_advice": true/false/UNKNOWN,
+            "handles_sensitive_customer_data": true/false/UNKNOWN,
+            "depends_heavily_on_utilities": true/false/UNKNOWN,
+            "uses_specialized_equipment_or_machinery": true/false/UNKNOWN,
+            "single_location_dependency": true/false/UNKNOWN
+        }
+        }
+
+        Only mark TRUE if supported by document evidence.
+
+        -----------------------------
+        STEP 3 — COVERAGE GAP ANALYSIS
+        -----------------------------
+
+        Identify where risk factors exist but coverage is missing or limited.
+
+        {
+        "coverage_gaps": [
+            {
+            "risk": "",
+            "why_gap_exists": "",
+            "evidence_from_policy": ""
+            }
+        ]
+        }
+
+        -----------------------------
+        STEP 4 — ENDORSEMENT RECOMMENDATIONS
+        -----------------------------
+
+        Map gaps to endorsements.
+
+        Allowed endorsements to recommend:
+
+        - Utility Service Interruption
+        - Spoilage Coverage
+        - Event Cancellation
+        - Errors & Omissions (E&O)
+        - Cyber Liability
+        - Equipment Breakdown
+        - Contingent Business Interruption
+        - Flood (separate policy)
+        - Ordinance or Law
+        - Data Breach Response
+
+        Output:
+
+        {
+        "endorsement_recommendations": [
+            {
+            "endorsement_name": "",
+            "priority": "HIGH | MEDIUM | LOW",
+            "reason_for_recommendation": "",
+            "risk_if_not_added": "",
+            "evidence_from_document": ""
+            }
+        ]
+        }
+
+        Priority logic:
+        HIGH = Business operations depend on this exposure AND policy does not cover it
+        MEDIUM = Partial coverage or moderate exposure
+        LOW = Edge-case or limited exposure
+
+        -----------------------------
+        STEP 5 — FINAL OUTPUT FORMAT
+        -----------------------------
+
+        Return:
+
+        {
+        "policy_data": {...},
+        "operational_risk_factors": {...},
+        "coverage_gaps": [...],
+        "endorsement_recommendations": [...]
+        }
+    """
+        message = self.client.messages.create(
+                model=self.model,
+                max_tokens=self.max_tokens,
+                temperature=self.temperature,
+                messages=[
+                    {
+                        "role": "user",
+                        "content": prompt
+                    }
+                ]
+        )
+
+        return message
     def compare_policies(
         self,
         baseline_text: str,
