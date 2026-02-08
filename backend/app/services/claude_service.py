@@ -20,7 +20,7 @@ class ClaudeService:
         """Initialize Claude client with API key from settings."""
         self.client = Anthropic(api_key=settings.anthropic_api_key)
         self.model = settings.anthropic_model
-        self.temperature = 0.2  # Low temperature for consistency
+        self.temperature = 0  # Deterministic output for structured JSON
         self.max_tokens = 4096  # Max for Haiku/Sonnet (Claude 3.5 Sonnet supports 8192)
     
     def build_comparison_prompt(self, baseline_text: str, renewal_text: str) -> str:
@@ -89,9 +89,9 @@ IMPORTANT INSTRUCTIONS:
    - Include confidence score (0.0 to 1.0) based on how certain you are
    - Provide specific baseline_value and renewal_value for comparison
 5. For premium_comparison:
-   - Extract exact premium amounts from both policies
+   - Extract exact premium amounts from both policies (only use numbers explicitly stated in the documents)
    - Calculate the difference and percentage change
-   - If premium not found, use null values
+   - If premium is not found or unclear, use null — do not infer or invent amounts
 6. For broker_questions:
    - Generate 3-5 actionable questions the broker should ask
    - Focus on clarifying ambiguities or concerning changes

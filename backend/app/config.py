@@ -21,8 +21,8 @@ class Settings(BaseSettings):
     aws_region: str = "us-east-1"
     
     # Clerk Authentication
-    # clerk_secret_key: str
-    # clerk_publishable_key: str
+    clerk_secret_key: str
+    clerk_publishable_key: str
     
     # Anthropic Claude API
     anthropic_api_key: str

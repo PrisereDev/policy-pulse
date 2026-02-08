@@ -1,6 +1,6 @@
 from sqlalchemy import Column, String, Integer, DateTime, ForeignKey, Enum as SQLEnum, Text
 from sqlalchemy.orm import relationship
-from datetime import datetime
+from datetime import datetime, timezone
 import uuid
 import enum
 
@@ -26,7 +26,7 @@ class AnalysisJob(Base):
     
     # Foreign key to User
     user_id = Column(String(255), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
-    
+
     # Job status
     status = Column(
         SQLEnum(JobStatus, native_enum=False, length=20),
@@ -53,8 +53,8 @@ class AnalysisJob(Base):
     error_message = Column(Text, nullable=True)
     
     # Timestamps
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=datetime.now(timezone.utc), nullable=False, index=True)
+    updated_at = Column(DateTime, default=datetime.now(timezone.utc), onupdate=datetime.now(timezone.utc), nullable=False)
     started_at = Column(DateTime, nullable=True)  # When processing started
     completed_at = Column(DateTime, nullable=True)  # When processing completed
     
@@ -95,11 +95,11 @@ class AnalysisJob(Base):
         if self.status == JobStatus.PROCESSING and self.started_at:
             # Estimate based on progress (assume 120 seconds total)
             from datetime import timedelta
-            elapsed = (datetime.utcnow() - self.started_at).total_seconds()
+            elapsed = (datetime.now(timezone.utc) - self.started_at).total_seconds()
             if self.progress > 0:
                 estimated_total = (elapsed / self.progress) * 100
                 remaining = estimated_total - elapsed
-                estimated_completion = datetime.utcnow() + timedelta(seconds=remaining)
+                estimated_completion = datetime.now(timezone.utc) + timedelta(seconds=remaining)
                 return estimated_completion.isoformat()
         
         return None
@@ -109,25 +109,25 @@ class AnalysisJob(Base):
         self.progress = min(max(progress, 0), 100)  # Clamp between 0-100
         if message:
             self.status_message = message
-        self.updated_at = datetime.utcnow()
+        self.updated_at = datetime.now(timezone.utc)
 
     def mark_processing(self):
         """Mark job as processing."""
         self.status = JobStatus.PROCESSING
-        self.started_at = datetime.utcnow()
-        self.updated_at = datetime.utcnow()
+        self.started_at = datetime.now(timezone.utc)
+        self.updated_at = datetime.now(timezone.utc)
 
     def mark_completed(self):
         """Mark job as completed."""
         self.status = JobStatus.COMPLETED
         self.progress = 100
-        self.completed_at = datetime.utcnow()
-        self.updated_at = datetime.utcnow()
+        self.completed_at = datetime.now(timezone.utc)
+        self.updated_at = datetime.now(timezone.utc)
 
     def mark_failed(self, error_message: str):
         """Mark job as failed with error message."""
         self.status = JobStatus.FAILED
         self.error_message = error_message
-        self.completed_at = datetime.utcnow()
-        self.updated_at = datetime.utcnow()
+        self.completed_at = datetime.now(timezone.utc) if self.completed_at is None else self.completed_at
+        self.updated_at = datetime.now(timezone.utc)
 

@@ -3,7 +3,7 @@ Background analysis processor for comparing insurance policies.
 """
 import asyncio
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, Any
 import traceback
 
@@ -37,7 +37,7 @@ class AnalysisProcessor:
         Args:
             job_id: The analysis job ID to process
         """
-        start_time = datetime.utcnow()
+        start_time = datetime.now(timezone.utc)
         baseline_s3_key = None
         renewal_s3_key = None
         
@@ -133,7 +133,8 @@ class AnalysisProcessor:
                 db.commit()
             
             # Calculate processing time
-            processing_time = int((datetime.utcnow() - start_time).total_seconds())
+            processing_time = int((datetime.now(timezone.utc) - start_time).total_seconds())
+            
             
             # Create analysis result
             with get_db_context() as db:

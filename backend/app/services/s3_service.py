@@ -5,7 +5,7 @@ import boto3
 from botocore.exceptions import ClientError
 from botocore.config import Config
 from typing import Optional, Dict, Any
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import uuid
 import logging
 
@@ -92,7 +92,7 @@ class S3Service:
                 ExpiresIn=expiration
             )
             
-            expires_at = datetime.utcnow() + timedelta(seconds=expiration)
+            expires_at = datetime.now(timezone.utc) + timedelta(seconds=expiration)
             
             logger.info(f"Generated presigned upload URL for key: {s3_key}")
             
