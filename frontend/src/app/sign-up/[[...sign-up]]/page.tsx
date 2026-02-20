@@ -21,7 +21,8 @@ export default function SignUpPage() {
           Create your account to start comparing insurance policies
         </p>
         <div className="w-full">
-          <SignUp 
+          <SignUp
+            forceRedirectUrl="/dashboard"
             appearance={{
               elements: {
                 formButtonPrimary: 

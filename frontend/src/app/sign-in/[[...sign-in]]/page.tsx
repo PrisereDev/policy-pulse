@@ -21,7 +21,8 @@ export default function SignInPage() {
           Sign in to compare your insurance policies
         </p>
         <div className="w-full">
-          <SignIn 
+          <SignIn
+            forceRedirectUrl="/dashboard"
             appearance={{
               elements: {
                 formButtonPrimary: 

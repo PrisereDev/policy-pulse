@@ -1,12 +1,10 @@
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, Field
 
 class Datum(BaseModel):
-    """location: -> Where is the business located?"""
-    location: str
-    """climate: Does your inventory require constant refrigeration or climate control?"""
-    climate: bool
-    """events: Do clients pay you for professional advice, designs, or technical services?"""
-    events: bool
-    """How do you handle customer data and payments?** | - Mostly digital/online<br>- Mostly in-person/cash | If Digital → **Recommend: Cyber Insurance**. Covers recovery and legal costs from hacks/breaches. |"""
-    payments: bool
+    """Schema for the 5-question business risk assessment."""
+    location: str = Field(..., description="Where is the business located?")
+    climate: bool = Field(..., description="Does inventory require refrigeration or climate control?")
+    events: bool = Field(..., description="Do clients pay for professional advice, designs, or technical services?")
+    errors_and_omissions: bool = Field(..., description="Does the business have E&O coverage?")
+    payments: bool = Field(..., description="Does the business handle customer data and payments digitally?")
     

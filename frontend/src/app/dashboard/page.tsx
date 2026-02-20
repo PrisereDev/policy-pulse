@@ -3,6 +3,7 @@
 import { useAuth, useUser } from "@clerk/nextjs";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
+import { useOnboardingGuard } from "@/hooks/use-onboarding";
 import { Logo } from "@/components/brand/logo";
 import { PageHeader } from "@/components/brand/page-header";
 import { Button } from "@/components/ui/button";
@@ -202,6 +203,7 @@ function DashboardContent() {
 
 export default function DashboardPage() {
   const { isLoaded, userId } = useAuth();
+  const { isOnboarded, isLoading: onboardingLoading } = useOnboardingGuard();
   const router = useRouter();
 
   useEffect(() => {
@@ -210,7 +212,7 @@ export default function DashboardPage() {
     }
   }, [isLoaded, userId, router]);
 
-  if (!isLoaded || !userId) {
+  if (!isLoaded || !userId || onboardingLoading || !isOnboarded) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-prisere-maroon"></div>

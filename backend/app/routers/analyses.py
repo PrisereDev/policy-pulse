@@ -24,7 +24,7 @@ from app.schemas.analysis import (
 )
 from app.services.s3_service import s3_service
 from app.services.analysis_processor import analysis_processor
-from backend.app.schemas.data import Datum
+from app.schemas.data import Datum
 # from app.utils.clerk_auth import get_current_user
 
 logger = logging.getLogger(__name__)
