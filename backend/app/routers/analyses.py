@@ -2,6 +2,9 @@
 Analyses router for creating and managing policy comparison jobs.
 """
 from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks, Path
+from fastapi.responses import JSONResponse
+
+from pydantic import ValidationError
 from sqlalchemy.orm import Session
 from typing import List
 import logging
@@ -11,14 +14,17 @@ from app.database import get_db
 from app.models.user import User
 from app.models.analysis_job import AnalysisJob, JobStatus
 from app.models.analysis_result import AnalysisResult
+
+
 from app.schemas.analysis import (
     AnalysisCreateRequest,
     AnalysisJobResponse,
     AnalysisResultResponse,
-    AnalysisListItem
+    AnalysisListItem,
 )
 from app.services.s3_service import s3_service
 from app.services.analysis_processor import analysis_processor
+from backend.app.schemas.data import Datum
 # from app.utils.clerk_auth import get_current_user
 
 logger = logging.getLogger(__name__)
@@ -138,7 +144,50 @@ async def create_analysis(
             detail="Failed to create analysis job"
         )
 
+@router.post("/assessment/")
+async def get_data_points(request_json: dict):
+    try:
+        client_data = Datum(**request_json)
+        res = []
+        if client_data.location.strip():
+            res.append(f"Analysis for {client_data.location}: Since you have a physical presence, review your property and premise liability limits.")
+            #SYDANE's ANALYSIS CALLED HERE TO RETURN INFO
+        else:
+            raise ValueError("Location string cannot be empty")
 
+        # 2. Climate
+        if client_data.climate:
+            res.append("We advise you to review your policy against potential damages from adverse weather conditions.")
+        else:
+            res.append("Risk: Without climate-specific coverage, inventory loss due to temperature fluctuations will not be reimbursed. Please review your policy.")
+
+        # 3. Events
+        if client_data.events:
+            res.append("Review your professional advice coverage to ensure your current limits match your highest contract value.")
+        else:
+            res.append("Risk: You are currently exposed to lawsuits arising from professional errors or technical service failures. Please review your policy.")
+
+        # 4. Errors & Omissions
+        if client_data.errors_and_omissions:
+            res.append("We suggest a periodic review of your E&O 'Limit of Liability' to ensure it keeps pace with your business growth.")
+        else:
+            res.append("Risk: Legal fees and settlements for professional mistakes often exceed contract values; E&O is highly recommended. Please review your policy.")
+
+        # 5. Payments
+        if client_data.payments:
+            res.append("Review your Cyber Insurance policy specifically for Ransomware and Third-Party Data Breach recovery.")
+        else:
+            res.append("Risk: Handling customer data without Cyber Insurance leaves you liable for notification costs and legal penalties after a hack. Please review your policy.")
+
+        return JSONResponse(status_code=200, content=res)
+
+    except (ValidationError, ValueError, Exception) as e:
+        logger.error(f"Validation or Logic Error: {e}")
+        return JSONResponse(
+            status_code=500,
+            content=[None, None, None, None, None]
+        )
+    
 @router.get("/{job_id}/status", response_model=AnalysisJobResponse)
 async def get_analysis_status(
     job_id: str = Path(..., description="Analysis job ID"),
