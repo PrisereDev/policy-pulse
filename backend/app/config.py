@@ -8,7 +8,7 @@ class Settings(BaseSettings):
     # Server Configuration
     port: int = 3001
     environment: str = "development"
-    allowed_origins: str = "http://localhost:3000,http://localhost:3001"
+    allowed_origins: str = "http://localhost:3000,http://localhost:3001, https://prisere.vercel.app"
     log_level: str = "INFO"  # DEBUG, INFO, WARNING, ERROR, CRITICAL
     
     # Database
