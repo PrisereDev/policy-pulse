@@ -25,23 +25,11 @@ from app.schemas.analysis import (
 from app.services.s3_service import s3_service
 from app.services.analysis_processor import analysis_processor
 from app.schemas.data import Datum
-# from app.utils.clerk_auth import get_current_user
+from app.utils.clerk_auth import get_current_user
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/v1/analyses", tags=["analyses"])
-
-
-# TODO: Re-enable authentication when Clerk keys are available
-# For now, using mock user for testing
-def get_mock_user():
-    """Mock user for testing without Clerk authentication."""
-    from app.models.user import User
-    user = User()
-    user.id = "test_user_123"
-    user.email = "test@example.com"
-    user.name = "Test User"
-    return user
 
 
 @router.post("", response_model=AnalysisJobResponse, status_code=status.HTTP_201_CREATED)
@@ -49,8 +37,7 @@ async def create_analysis(
     request: AnalysisCreateRequest,
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
-    # user: User = Depends(get_current_user)  # TODO: Enable when Clerk keys available
-    user: User = Depends(get_mock_user)  # Temporary for testing
+    user: User = Depends(get_current_user),
 ):
     """
     Create a new analysis job.
@@ -192,8 +179,7 @@ async def get_data_points(request_json: dict):
 async def get_analysis_status(
     job_id: str = Path(..., description="Analysis job ID"),
     db: Session = Depends(get_db),
-    # user: User = Depends(get_current_user)  # TODO: Enable when Clerk keys available
-    user: User = Depends(get_mock_user)  # Temporary for testing
+    user: User = Depends(get_current_user),
 ):
     """
     Get current status and progress of an analysis job.
@@ -249,8 +235,7 @@ async def get_analysis_status(
 async def get_analysis_result(
     job_id: str = Path(..., description="Analysis job ID"),
     db: Session = Depends(get_db),
-    # user: User = Depends(get_current_user)  # TODO: Enable when Clerk keys available
-    user: User = Depends(get_mock_user)  # Temporary for testing
+    user: User = Depends(get_current_user),
 ):
     """
     Get full analysis results (only available when job is completed).
@@ -324,8 +309,7 @@ async def get_analysis_result(
 @router.get("", response_model=List[AnalysisListItem])
 async def list_analyses(
     db: Session = Depends(get_db),
-    # user: User = Depends(get_current_user)  # TODO: Enable when Clerk keys available
-    user: User = Depends(get_mock_user)  # Temporary for testing
+    user: User = Depends(get_current_user),
 ):
     """
     List all analysis jobs for the current user.
@@ -378,8 +362,7 @@ async def list_analyses(
 async def delete_analysis(
     job_id: str = Path(..., description="Analysis job ID"),
     db: Session = Depends(get_db),
-    # user: User = Depends(get_current_user)  # TODO: Enable when Clerk keys available
-    user: User = Depends(get_mock_user)  # Temporary for testing
+    user: User = Depends(get_current_user),
 ):
     """
     Delete an analysis job and its results.

@@ -16,17 +16,15 @@ export class ApiError extends Error {
 
 async function apiRequest<T>(
   endpoint: string,
-  options: RequestInit = {}
+  options: RequestInit = {},
+  token?: string | null
 ): Promise<T> {
   const url = `${API_BASE_URL}${endpoint}`;
-  
-  console.log('🔥 API: Making request to:', url);
-  console.log('🔥 API: API_BASE_URL:', API_BASE_URL);
-  console.log('🔥 API: endpoint:', endpoint);
   
   const config: RequestInit = {
     headers: {
       "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...options.headers,
     },
     ...options,
@@ -67,21 +65,19 @@ interface UploadInitResponse {
 }
 
 export const analysisApi = {
-  // Step 1: Upload files to S3 and get S3 keys
   uploadFiles: async (
     baselineFile: File,
-    renewalFile: File
+    renewalFile: File,
+    token?: string | null
   ): Promise<{ baseline_s3_key: string; renewal_s3_key: string }> => {
-    // Upload baseline file
     const baselineInit = await apiRequest<UploadInitResponse>("/uploads/init", {
       method: "POST",
       body: JSON.stringify({
         file_type: "application/pdf",
         filename: baselineFile.name,
       }),
-    });
+    }, token);
 
-    // Upload to S3 using presigned URL
     const baselineFormData = new FormData();
     Object.entries(baselineInit.fields).forEach(([key, value]) => {
       baselineFormData.append(key, value);
@@ -100,16 +96,14 @@ export const analysisApi = {
       );
     }
 
-    // Upload renewal file
     const renewalInit = await apiRequest<UploadInitResponse>("/uploads/init", {
       method: "POST",
       body: JSON.stringify({
         file_type: "application/pdf",
         filename: renewalFile.name,
       }),
-    });
+    }, token);
 
-    // Upload to S3 using presigned URL
     const renewalFormData = new FormData();
     Object.entries(renewalInit.fields).forEach(([key, value]) => {
       renewalFormData.append(key, value);
@@ -134,11 +128,11 @@ export const analysisApi = {
     };
   },
 
-  // Step 2: Create analysis job with S3 keys
   createAnalysis: async (
     baseline_s3_key: string,
     renewal_s3_key: string,
-    metadata?: { company_name?: string; policy_type?: string }
+    metadata?: { company_name?: string; policy_type?: string },
+    token?: string | null
   ): Promise<AnalysisJob> => {
     return apiRequest<AnalysisJob>("/analyses", {
       method: "POST",
@@ -148,21 +142,18 @@ export const analysisApi = {
         metadata_company_name: metadata?.company_name,
         metadata_policy_type: metadata?.policy_type,
       }),
-    });
+    }, token);
   },
 
-  // Get analysis job status
-  getAnalysisStatus: async (jobId: string): Promise<AnalysisJob> => {
-    return apiRequest<AnalysisJob>(`/analyses/${jobId}/status`);
+  getAnalysisStatus: async (jobId: string, token?: string | null): Promise<AnalysisJob> => {
+    return apiRequest<AnalysisJob>(`/analyses/${jobId}/status`, {}, token);
   },
 
-  // Get analysis results
-  getAnalysisResult: async (jobId: string): Promise<AnalysisResult> => {
-    return apiRequest<AnalysisResult>(`/analyses/${jobId}/result`);
+  getAnalysisResult: async (jobId: string, token?: string | null): Promise<AnalysisResult> => {
+    return apiRequest<AnalysisResult>(`/analyses/${jobId}/result`, {}, token);
   },
 
-  // Get user's analysis history
-  getAnalysisHistory: async (): Promise<AnalysisJob[]> => {
-    return apiRequest<AnalysisJob[]>("/analyses");
+  getAnalysisHistory: async (token?: string | null): Promise<AnalysisJob[]> => {
+    return apiRequest<AnalysisJob[]>("/analyses", {}, token);
   },
 };

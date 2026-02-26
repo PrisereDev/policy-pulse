@@ -41,7 +41,11 @@ def get_clerk_jwks() -> Dict[str, Any]:
     jwks_url = f"https://api.clerk.com/v1/jwks"
     
     try:
-        response = requests.get(jwks_url, timeout=10)
+        response = requests.get(
+            jwks_url,
+            timeout=10,
+            headers={"Authorization": f"Bearer {settings.clerk_secret_key}"}
+        )
         response.raise_for_status()
         _jwks_cache = response.json()
         logger.info("Successfully fetched Clerk JWKS")

@@ -113,12 +113,8 @@ async def root():
 
 
 # Import and include routers
-# Auth router disabled for testing without Clerk keys
-# from app.routers import auth
-# app.include_router(auth.router)
-
-# Upload router (no auth required for testing)
-from app.routers import uploads, analyses
+from app.routers import auth, uploads, analyses
+app.include_router(auth.router)
 app.include_router(uploads.router)
 app.include_router(analyses.router)
 
