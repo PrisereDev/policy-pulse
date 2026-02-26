@@ -237,6 +237,17 @@ async def get_current_user(
         user = db.query(User).filter(User.id == user_id).first()
         if user:
             return user
+        existing = db.query(User).filter(User.email == email).first()
+        if existing:
+            logger.info(f"Found existing user by email, updating ID from {existing.id} to {user_id}")
+            existing.id = user_id
+            try:
+                db.commit()
+                db.refresh(existing)
+                return existing
+            except Exception:
+                db.rollback()
+                return existing
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to create user account"
