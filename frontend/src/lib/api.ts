@@ -1,4 +1,4 @@
-import { AnalysisJob, AnalysisResult } from "@/types/api";
+import { AnalysisJob, AnalysisResult, GapAnalysisResult } from "@/types/api";
 
 // API routes are now part of the Next.js app
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://prisere-backend.onrender.com/v1';
@@ -155,5 +155,53 @@ export const analysisApi = {
 
   getAnalysisHistory: async (token?: string | null): Promise<AnalysisJob[]> => {
     return apiRequest<AnalysisJob[]>("/analyses", {}, token);
+  },
+
+  uploadSingleFile: async (
+    file: File,
+    token?: string | null
+  ): Promise<string> => {
+    const init = await apiRequest<UploadInitResponse>("/uploads/init", {
+      method: "POST",
+      body: JSON.stringify({
+        file_type: "application/pdf",
+        filename: file.name,
+      }),
+    }, token);
+
+    const formData = new FormData();
+    Object.entries(init.fields).forEach(([key, value]) => {
+      formData.append(key, value);
+    });
+    formData.append("file", file);
+
+    const s3Response = await fetch(init.upload_url, {
+      method: "POST",
+      body: formData,
+    });
+
+    if (!s3Response.ok) {
+      throw new ApiError("Failed to upload file to S3", s3Response.status);
+    }
+
+    return init.s3_key;
+  },
+
+  createGapAnalysis: async (
+    policyS3Key: string,
+    riskProfile: Record<string, unknown>,
+    token?: string | null
+  ): Promise<AnalysisJob> => {
+    return apiRequest<AnalysisJob>("/analyses/gap", {
+      method: "POST",
+      body: JSON.stringify({
+        policy_s3_key: policyS3Key,
+        risk_profile: riskProfile,
+      }),
+    }, token);
+  },
+
+  getGapAnalysisResult: async (jobId: string, token?: string | null): Promise<GapAnalysisResult> => {
+    return apiRequest<GapAnalysisResult>(`/analyses/${jobId}/gap-result`, {}, token);
   },
 };

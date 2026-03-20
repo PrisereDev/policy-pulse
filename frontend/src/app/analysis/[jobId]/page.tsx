@@ -1,8 +1,8 @@
 "use client";
 
 import { use, useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
-import { useAnalysisStatus, useAnalysisResult } from "@/hooks/use-analysis";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useAnalysisStatus, useAnalysisResult, useGapAnalysisResult } from "@/hooks/use-analysis";
 import { Logo } from "@/components/brand/logo";
 import { LoadingSpinner } from "@/components/brand/loading-spinner";
 import { Card, CardContent } from "@/components/ui/card";
@@ -21,23 +21,35 @@ const processingSteps = [
 
 export default function AnalysisPage({ params }: { params: Promise<{ jobId: string }> }) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const resolvedParams = use(params);
+  const analysisType = searchParams.get("type");
   const [currentStep, setCurrentStep] = useState(0);
   const [currentTip, setCurrentTip] = useState(0);
   
+  const isGap = analysisType === "gap";
   const { data: analysisJob } = useAnalysisStatus(resolvedParams.jobId);
-  
-  // Poll for result availability when job is completed
-  const { data: result } = useAnalysisResult(
+  const isCompleted = analysisJob?.status === "completed";
+
+  const { data: comparisonResult } = useAnalysisResult(
     resolvedParams.jobId,
-    analysisJob?.status === "completed",
-    true // Enable polling
+    isCompleted && !isGap,
+    true
   );
 
+  const { data: gapResult } = useGapAnalysisResult(
+    resolvedParams.jobId,
+    isCompleted && isGap,
+  );
+
+  const result = isGap ? gapResult : comparisonResult;
+
   useEffect(() => {
-    // Redirect to results when analysis is completed AND result is available
-    if (analysisJob?.status === "completed" && result) {
-      router.push(`/results/${resolvedParams.jobId}`);
+    if (isCompleted && result) {
+      const destination = isGap
+        ? `/gap-results/${resolvedParams.jobId}`
+        : `/results/${resolvedParams.jobId}`;
+      router.push(destination);
       return;
     }
 

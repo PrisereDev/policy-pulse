@@ -108,14 +108,14 @@ export default function OnboardingPage() {
     if (isLastStep) {
       setIsSubmitting(true);
       try {
+        sessionStorage.setItem("onboardingAnswers", JSON.stringify(answers));
         await user?.update({
           unsafeMetadata: {
             ...user.unsafeMetadata,
-            hasCompletedOnboarding: true,
             onboardingAnswers: answers,
           },
         });
-        router.push("/dashboard");
+        router.push("/onboarding/upload");
       } catch (error) {
         console.error("Failed to save onboarding data:", error);
         setIsSubmitting(false);

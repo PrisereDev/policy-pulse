@@ -9,6 +9,7 @@ export const ANALYSIS_QUERY_KEYS = {
   all: ["analysis"] as const,
   status: (jobId: string) => [...ANALYSIS_QUERY_KEYS.all, "status", jobId] as const,
   result: (jobId: string) => [...ANALYSIS_QUERY_KEYS.all, "result", jobId] as const,
+  gapResult: (jobId: string) => [...ANALYSIS_QUERY_KEYS.all, "gap-result", jobId] as const,
   history: () => [...ANALYSIS_QUERY_KEYS.all, "history"] as const,
 };
 
@@ -106,5 +107,49 @@ export function useAnalysisHistory() {
       return analysisApi.getAnalysisHistory(token);
     },
     staleTime: 60 * 1000, // History is stable for 1 minute
+  });
+}
+
+export function useCreateGapAnalysis() {
+  const queryClient = useQueryClient();
+  const { getToken } = useAuth();
+
+  return useMutation({
+    mutationFn: async ({
+      policyFile,
+      riskProfile,
+    }: {
+      policyFile: File;
+      riskProfile: Record<string, unknown>;
+    }) => {
+      const token = await getToken();
+
+      const s3Key = await analysisApi.uploadSingleFile(policyFile, token);
+
+      return analysisApi.createGapAnalysis(s3Key, riskProfile, token);
+    },
+    onSuccess: (data: AnalysisJob) => {
+      queryClient.setQueryData(
+        ANALYSIS_QUERY_KEYS.status(data.job_id),
+        data
+      );
+      queryClient.invalidateQueries({
+        queryKey: ANALYSIS_QUERY_KEYS.history(),
+      });
+    },
+  });
+}
+
+export function useGapAnalysisResult(jobId: string, enabled = true) {
+  const { getToken } = useAuth();
+
+  return useQuery({
+    queryKey: ANALYSIS_QUERY_KEYS.gapResult(jobId),
+    queryFn: async () => {
+      const token = await getToken();
+      return analysisApi.getGapAnalysisResult(jobId, token);
+    },
+    enabled: enabled && !!jobId,
+    staleTime: 5 * 60 * 1000,
   });
 }

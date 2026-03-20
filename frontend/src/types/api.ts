@@ -18,3 +18,21 @@ export interface AnalysisJob {
   estimated_completion_time?: string;
   error_message?: string;
 }
+
+export interface CoverageGap {
+  type: string;
+  status: "covered" | "not_covered";
+  title: string;
+  explanation: string;
+}
+
+export interface GapAnalysisResult {
+  job_id: string;
+  status: string;
+  gaps: CoverageGap[];
+  business_name: string | null;
+  policy_expiration_date: string | null;
+  summary: string;
+  recommendations: string[];
+  metadata: Record<string, unknown>;
+}
