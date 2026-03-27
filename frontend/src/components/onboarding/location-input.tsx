@@ -55,6 +55,48 @@ function extractCityState(
   return null;
 }
 
+const US_STATE_ABBR: Record<string, string> = {
+  Alabama: "AL", Alaska: "AK", Arizona: "AZ", Arkansas: "AR",
+  California: "CA", Colorado: "CO", Connecticut: "CT", Delaware: "DE",
+  Florida: "FL", Georgia: "GA", Hawaii: "HI", Idaho: "ID",
+  Illinois: "IL", Indiana: "IN", Iowa: "IA", Kansas: "KS",
+  Kentucky: "KY", Louisiana: "LA", Maine: "ME", Maryland: "MD",
+  Massachusetts: "MA", Michigan: "MI", Minnesota: "MN", Mississippi: "MS",
+  Missouri: "MO", Montana: "MT", Nebraska: "NE", Nevada: "NV",
+  "New Hampshire": "NH", "New Jersey": "NJ", "New Mexico": "NM",
+  "New York": "NY", "North Carolina": "NC", "North Dakota": "ND",
+  Ohio: "OH", Oklahoma: "OK", Oregon: "OR", Pennsylvania: "PA",
+  "Rhode Island": "RI", "South Carolina": "SC", "South Dakota": "SD",
+  Tennessee: "TN", Texas: "TX", Utah: "UT", Vermont: "VT",
+  Virginia: "VA", Washington: "WA", "West Virginia": "WV",
+  Wisconsin: "WI", Wyoming: "WY", "District of Columbia": "DC",
+};
+
+async function reverseGeocodeNominatim(
+  lat: number,
+  lon: number
+): Promise<string | null> {
+  try {
+    const res = await fetch(
+      `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json`,
+      { headers: { "Accept-Language": "en" } }
+    );
+    if (!res.ok) return null;
+    const data = await res.json();
+    const addr = data.address;
+    if (!addr) return null;
+
+    const city = addr.city || addr.town || addr.village || "";
+    const stateRaw = addr.state || "";
+    const state = US_STATE_ABBR[stateRaw] || stateRaw;
+
+    if (city && state) return `${city}, ${state}`;
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 export function LocationInput({
   value,
   onChange,
@@ -92,35 +134,40 @@ export function LocationInput({
     geocoderRef.current = new google.maps.Geocoder();
   }, [mapsReady]);
 
-  // Feature 1: auto-detect location on first render
+  // Feature 1: auto-detect location on mount (no Google dependency)
   useEffect(() => {
-    if (!mapsReady || hasAutoDetected.current) return;
-    if (!navigator.geolocation || !geocoderRef.current) return;
-    if (value) return; // don't overwrite if user already typed something
-
+    if (hasAutoDetected.current || !navigator.geolocation) return;
     hasAutoDetected.current = true;
     setDetecting(true);
 
     navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        const latlng = {
-          lat: pos.coords.latitude,
-          lng: pos.coords.longitude,
-        };
-        geocoderRef.current!.geocode({ location: latlng }, (results, status) => {
+      async (pos) => {
+        const { latitude: lat, longitude: lng } = pos.coords;
+
+        if (geocoderRef.current) {
+          geocoderRef.current.geocode(
+            { location: { lat, lng } },
+            (results, status) => {
+              setDetecting(false);
+              if (status === google.maps.GeocoderStatus.OK && results) {
+                const formatted = extractCityState(results);
+                if (formatted) onChange(formatted);
+              }
+            }
+          );
+        } else {
+          const formatted = await reverseGeocodeNominatim(lat, lng);
           setDetecting(false);
-          if (status === google.maps.GeocoderStatus.OK && results) {
-            const formatted = extractCityState(results);
-            if (formatted) onChange(formatted);
-          }
-        });
+          if (formatted) onChange(formatted);
+        }
       },
       () => {
         setDetecting(false);
       },
       { timeout: 8000 }
     );
-  }, [mapsReady, value, onChange]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Feature 2: debounced autocomplete
   const fetchPredictions = useCallback(
