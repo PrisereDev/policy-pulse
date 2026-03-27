@@ -15,6 +15,7 @@ import {
   Shield,
   CreditCard,
 } from "lucide-react";
+import { LocationInput } from "@/components/onboarding/location-input";
 
 interface Question {
   id: string;
@@ -196,17 +197,28 @@ export default function OnboardingPage() {
               </p>
 
               {question.type === "text" ? (
-                <input
-                  type="text"
-                  value={(currentAnswer as string) || ""}
-                  onChange={(e) => setAnswer(e.target.value)}
-                  placeholder={question.placeholder}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-md focus:border-prisere-maroon focus:ring-1 focus:ring-prisere-maroon focus:outline-none text-center"
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && canProceed) handleNext();
-                  }}
-                  autoFocus
-                />
+                question.id === "location" ? (
+                  <LocationInput
+                    value={(currentAnswer as string) || ""}
+                    onChange={(v) => setAnswer(v)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && canProceed) handleNext();
+                    }}
+                    placeholder={question.placeholder}
+                  />
+                ) : (
+                  <input
+                    type="text"
+                    value={(currentAnswer as string) || ""}
+                    onChange={(e) => setAnswer(e.target.value)}
+                    placeholder={question.placeholder}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-md focus:border-prisere-maroon focus:ring-1 focus:ring-prisere-maroon focus:outline-none text-center"
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && canProceed) handleNext();
+                    }}
+                    autoFocus
+                  />
+                )
               ) : (
                 <div className="flex gap-4 w-full">
                   <Button
