@@ -21,7 +21,7 @@ class AnalysisJobResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
     baseline_filename: str
-    renewal_filename: str
+    renewal_filename: Optional[str] = None
     progress: Optional[int] = None
     message: Optional[str] = None
     estimated_completion_time: Optional[str] = None
@@ -82,10 +82,39 @@ class AnalysisListItem(BaseModel):
     created_at: datetime
     completed_at: Optional[datetime] = None
     baseline_filename: str
-    renewal_filename: str
+    renewal_filename: Optional[str] = None
     total_changes: Optional[int] = None
     company_name: Optional[str] = None
     
+    class Config:
+        from_attributes = True
+
+
+class GapAnalysisCreateRequest(BaseModel):
+    """Request schema for creating a gap analysis job."""
+    policy_s3_key: str = Field(..., description="S3 key for the uploaded policy PDF")
+    risk_profile: Dict[str, Any] = Field(..., description="Risk profile data from onboarding")
+
+
+class CoverageGapItem(BaseModel):
+    """Schema for a single coverage gap."""
+    type: str
+    status: str  # "covered" or "not_covered"
+    title: str
+    explanation: str
+
+
+class GapAnalysisResultResponse(BaseModel):
+    """Response schema for gap analysis results."""
+    job_id: str
+    status: str
+    gaps: List[CoverageGapItem]
+    business_name: Optional[str] = None
+    policy_expiration_date: Optional[str] = None
+    summary: str
+    recommendations: List[str]
+    metadata: Dict[str, Any]
+
     class Config:
         from_attributes = True
 

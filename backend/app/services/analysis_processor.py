@@ -197,6 +197,135 @@ class AnalysisProcessor:
             logger.info(f"[{job_id}] Cleanup completed")
 
 
+    async def process_gap_analysis_job(self, job_id: str) -> None:
+        """
+        Process a gap analysis job: single policy + risk profile -> coverage gaps.
+        """
+        start_time = datetime.now(timezone.utc)
+        policy_s3_key = None
+
+        try:
+            with get_db_context() as db:
+                job = db.query(AnalysisJob).filter(AnalysisJob.id == job_id).first()
+                if not job:
+                    logger.error(f"Job not found: {job_id}")
+                    return
+
+                policy_s3_key = job.baseline_s3_key
+                job.mark_processing()
+                job.update_progress(5, "Starting gap analysis...")
+                db.commit()
+
+            # Download policy PDF
+            with get_db_context() as db:
+                job = db.query(AnalysisJob).filter(AnalysisJob.id == job_id).first()
+                job.update_progress(15, "Downloading policy from S3...")
+                db.commit()
+
+            policy_bytes = s3_service.download_file_content(policy_s3_key)
+            logger.info(f"[{job_id}] Downloaded policy PDF: {len(policy_bytes)} bytes")
+
+            # Extract text
+            with get_db_context() as db:
+                job = db.query(AnalysisJob).filter(AnalysisJob.id == job_id).first()
+                job.update_progress(30, "Extracting text from policy...")
+                db.commit()
+
+            policy_result = pdf_service.extract_text_with_metadata(policy_bytes)
+            policy_text = policy_result["text"]
+            logger.info(f"[{job_id}] Extracted policy text: {len(policy_text)} characters")
+
+            # Run Claude endorsement / gap analysis
+            with get_db_context() as db:
+                job = db.query(AnalysisJob).filter(AnalysisJob.id == job_id).first()
+                job.update_progress(50, "Analyzing coverage gaps with AI...")
+                db.commit()
+
+            claude_response = claude_service.endorsement_prompt(policy_text)
+            import json
+            response_text = claude_response.content[0].text
+            claude_data = json.loads(response_text)
+            logger.info(f"[{job_id}] Claude gap analysis completed")
+
+            # Build gap items from coverage_gaps + endorsement_recommendations
+            gaps = []
+            for gap in claude_data.get("coverage_gaps", []):
+                gaps.append({
+                    "type": gap.get("risk", "unknown"),
+                    "status": "not_covered",
+                    "title": gap.get("risk", ""),
+                    "explanation": gap.get("why_gap_exists", ""),
+                })
+
+            recommendations = []
+            for rec in claude_data.get("endorsement_recommendations", []):
+                recommendations.append(
+                    f"[{rec.get('priority', 'MEDIUM')}] {rec.get('endorsement_name', '')}: "
+                    f"{rec.get('reason_for_recommendation', '')}"
+                )
+
+            policy_data = claude_data.get("policy_data", {})
+            policy_meta = policy_data.get("policy_metadata", {}) if isinstance(policy_data, dict) else {}
+
+            processing_time = int((datetime.now(timezone.utc) - start_time).total_seconds())
+
+            # Save result as JSON in AnalysisResult
+            gap_result_payload = {
+                "gaps": gaps,
+                "business_name": policy_meta.get("named_insured"),
+                "policy_expiration_date": policy_meta.get("effective_dates"),
+                "summary": f"Found {len(gaps)} coverage gap(s) with {len(recommendations)} endorsement recommendation(s).",
+                "recommendations": recommendations,
+            }
+
+            with get_db_context() as db:
+                job = db.query(AnalysisJob).filter(AnalysisJob.id == job_id).first()
+                job.update_progress(90, "Saving gap analysis results...")
+                db.commit()
+
+            with get_db_context() as db:
+                analysis_result = AnalysisResult(
+                    job_id=job_id,
+                    total_changes=len(gaps),
+                    change_categories={"coverage_gap": len(gaps)},
+                    changes=gap_result_payload.get("gaps", []),
+                    premium_comparison=None,
+                    suggested_actions=[{"action": r} for r in recommendations],
+                    educational_insights=[],
+                    model_version=claude_service.model,
+                    processing_time_seconds=processing_time,
+                )
+                db.add(analysis_result)
+                db.commit()
+
+            with get_db_context() as db:
+                job = db.query(AnalysisJob).filter(AnalysisJob.id == job_id).first()
+                job.mark_completed()
+                db.commit()
+
+            logger.info(f"[{job_id}] Gap analysis completed in {processing_time}s")
+
+        except Exception as e:
+            logger.error(f"[{job_id}] Gap analysis failed: {e}")
+            logger.error(traceback.format_exc())
+            try:
+                with get_db_context() as db:
+                    job = db.query(AnalysisJob).filter(AnalysisJob.id == job_id).first()
+                    if job:
+                        job.mark_failed(f"Gap analysis failed: {str(e)}")
+                        db.commit()
+            except Exception as db_error:
+                logger.error(f"[{job_id}] Failed to mark job as failed: {db_error}")
+
+        finally:
+            try:
+                if policy_s3_key:
+                    s3_service.delete_file(policy_s3_key)
+                    logger.info(f"[{job_id}] Deleted policy PDF from S3")
+            except Exception as e:
+                logger.error(f"[{job_id}] Failed to delete policy PDF: {e}")
+
+
 # Global processor instance
 analysis_processor = AnalysisProcessor()
 

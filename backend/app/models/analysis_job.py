@@ -1,4 +1,5 @@
 from sqlalchemy import Column, String, Integer, DateTime, ForeignKey, Enum as SQLEnum, Text
+from sqlalchemy.dialects.postgresql import JSON
 from sqlalchemy.orm import relationship
 from datetime import datetime, timezone
 import uuid
@@ -17,7 +18,8 @@ class JobStatus(str, enum.Enum):
 
 class AnalysisJob(Base):
     """
-    AnalysisJob model for tracking insurance policy comparison jobs.
+    AnalysisJob model for tracking insurance policy analysis jobs.
+    Supports both policy comparison and gap analysis workflows.
     """
     __tablename__ = "analysis_jobs"
 
@@ -26,6 +28,9 @@ class AnalysisJob(Base):
     
     # Foreign key to User
     user_id = Column(String(255), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+
+    # Job type: "policy_comparison" or "gap_analysis"
+    job_type = Column(String(50), server_default="policy_comparison", nullable=False)
 
     # Job status
     status = Column(
@@ -41,13 +46,16 @@ class AnalysisJob(Base):
     # Status message (e.g., "Extracting text from baseline PDF...")
     status_message = Column(String(500), nullable=True)
     
-    # S3 keys for uploaded PDFs
+    # S3 keys for uploaded PDFs (renewal is optional for gap analysis)
     baseline_s3_key = Column(String(500), nullable=False)
-    renewal_s3_key = Column(String(500), nullable=False)
+    renewal_s3_key = Column(String(500), nullable=True)
     
-    # Original filenames
+    # Original filenames (renewal is optional for gap analysis)
     baseline_filename = Column(String(255), nullable=False)
-    renewal_filename = Column(String(255), nullable=False)
+    renewal_filename = Column(String(255), nullable=True)
+
+    # Risk profile data for gap analysis jobs (JSON)
+    risk_profile_data = Column(JSON, nullable=True)
     
     # Error message (if status is FAILED)
     error_message = Column(Text, nullable=True)

@@ -21,6 +21,8 @@ from app.schemas.analysis import (
     AnalysisJobResponse,
     AnalysisResultResponse,
     AnalysisListItem,
+    GapAnalysisCreateRequest,
+    GapAnalysisResultResponse,
 )
 from app.services.s3_service import s3_service
 from app.services.analysis_processor import analysis_processor
@@ -292,6 +294,72 @@ async def create_analysis(
             detail="Failed to create analysis job"
         )
 
+@router.post("/gap", response_model=AnalysisJobResponse, status_code=status.HTTP_201_CREATED)
+async def create_gap_analysis(
+    request: GapAnalysisCreateRequest,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """
+    Create a gap analysis job for a single policy + risk profile.
+
+    Returns a job_id immediately; the client polls GET /{job_id}/status for progress
+    and retrieves results via GET /{job_id}/gap-result when completed.
+    """
+    try:
+        logger.info(f"Creating gap analysis job for user: {user.id}")
+
+        if not s3_service.file_exists(request.policy_s3_key):
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Policy file not found in S3: {request.policy_s3_key}",
+            )
+
+        policy_filename = request.policy_s3_key.split("/")[-1]
+
+        job = AnalysisJob(
+            user_id=user.id,
+            job_type="gap_analysis",
+            status=JobStatus.PENDING,
+            baseline_s3_key=request.policy_s3_key,
+            baseline_filename=policy_filename,
+            risk_profile_data=request.risk_profile,
+            progress=0,
+            status_message="Gap analysis job created, waiting to start...",
+        )
+
+        db.add(job)
+        db.commit()
+        db.refresh(job)
+
+        logger.info(f"Created gap analysis job: {job.id}")
+
+        background_tasks.add_task(analysis_processor.process_gap_analysis_job, job.id)
+
+        return AnalysisJobResponse(
+            job_id=job.id,
+            status=job.status.value,
+            created_at=job.created_at,
+            updated_at=job.updated_at,
+            baseline_filename=job.baseline_filename,
+            renewal_filename=job.renewal_filename or "",
+            progress=job.progress,
+            message=job.status_message,
+            estimated_completion_time=job._estimate_completion_time(),
+            error_message=None,
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to create gap analysis job: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to create gap analysis job",
+        )
+
+
 @router.post("/assessment/")
 async def get_data_points(request_json: dict):
     try:
@@ -466,6 +534,71 @@ async def get_analysis_result(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to get analysis result"
+        )
+
+
+@router.get("/{job_id}/gap-result", response_model=GapAnalysisResultResponse)
+async def get_gap_analysis_result(
+    job_id: str = Path(..., description="Analysis job ID"),
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """
+    Get gap analysis results (only available when job is completed).
+    """
+    try:
+        job = db.query(AnalysisJob).filter(
+            AnalysisJob.id == job_id,
+            AnalysisJob.user_id == user.id,
+        ).first()
+
+        if not job:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Analysis job not found: {job_id}",
+            )
+
+        if job.status != JobStatus.COMPLETED:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Analysis is not completed yet. Current status: {job.status.value}",
+            )
+
+        result = db.query(AnalysisResult).filter(
+            AnalysisResult.job_id == job_id,
+        ).first()
+
+        if not result:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Gap analysis result not found",
+            )
+
+        gaps = result.changes or []
+        recommendations = [a.get("action", "") for a in (result.suggested_actions or [])]
+
+        return GapAnalysisResultResponse(
+            job_id=result.job_id,
+            status="completed",
+            gaps=gaps,
+            business_name=None,
+            policy_expiration_date=None,
+            summary=f"Found {len(gaps)} coverage gap(s) with {len(recommendations)} endorsement recommendation(s).",
+            recommendations=recommendations,
+            metadata={
+                "model_version": result.model_version or "unknown",
+                "processing_time_seconds": result.processing_time_seconds,
+                "completed_at": result.created_at.isoformat() if result.created_at else None,
+            },
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to get gap analysis result: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to get gap analysis result",
         )
 
 
