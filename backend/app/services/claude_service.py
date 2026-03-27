@@ -101,171 +101,177 @@ Return ONLY the JSON object, no additional text or explanation.
 """
         return prompt
     
-    def endorsement_prompt(self, policy_text: str) -> str:
-        prompt = """You are an insurance underwriting analyst AI.
+    def analyze_gap_coverage(
+        self,
+        policy_text: str,
+        risk_profile: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """
+        Analyze a single insurance policy for coverage gaps and endorsement
+        recommendations using Claude AI.
 
-        Your task is to read a commercial insurance policy document and:
+        Args:
+            policy_text: Extracted text from the policy PDF
+            risk_profile: Optional risk-profile data from onboarding
 
-        1) Extract structured policy and business data
-        2) Identify coverage gaps and operational risk dependencies
-        3) Recommend appropriate endorsements
-        4) Justify each recommendation using evidence from the document
+        Returns:
+            dict with keys: policy_data, operational_risk_factors,
+                            coverage_gaps, endorsement_recommendations
 
-        IMPORTANT RULES:
-        - Do NOT summarize the document.
-        - Extract factual data first.
-        - Then perform risk analysis.
-        - If information is missing, mark as "UNKNOWN" — do not guess. Do not make up numbers.
-        - Output ONLY valid JSON.
+        Raises:
+            Exception: If Claude API call fails or response is invalid
+        """
+        try:
+            risk_section = ""
+            if risk_profile:
+                risk_section = (
+                    "\n\nADDITIONAL CONTEXT — RISK PROFILE FROM BUSINESS OWNER:\n"
+                    f"{json.dumps(risk_profile, indent=2)}\n"
+                    "Use this risk profile to cross-reference against the policy "
+                    "when identifying coverage gaps.\n"
+                )
 
-        -----------------------------
-        STEP 1 — POLICY DATA EXTRACTION
-        -----------------------------
+            prompt = f"""You are an insurance underwriting analyst AI.
 
-        Extract the following:
+Your task is to read the commercial insurance policy document below and:
 
-        {
-        "policy_metadata": {
-            "policy_type": "",
-            "named_insured": "",
-            "effective_dates": "",
-            "locations_insured": [],
-            "industry_description": "",
-            "naics_or_class_code": ""
-        },
+1) Extract structured policy and business data
+2) Identify coverage gaps and operational risk dependencies
+3) Recommend appropriate endorsements
+4) Justify each recommendation using evidence from the document
 
-        "coverages_present": {
-            "property": true/false,
-            "general_liability": true/false,
-            "business_interruption": true/false,
-            "extra_expense": true/false,
-            "equipment_breakdown": true/false,
-            "cyber": true/false,
-            "flood": true/false,
-            "earthquake": true/false
-        },
+IMPORTANT RULES:
+- Do NOT summarize the document.
+- Extract factual data first, then perform risk analysis.
+- If information is missing, mark as "UNKNOWN" — do not guess or invent numbers.
+- You MUST return ONLY a single valid JSON object — no markdown, no commentary.
+- If the document is unreadable or empty, still return the JSON structure with
+  empty arrays and "UNKNOWN" values. Never return an empty response.
+{risk_section}
+----- BEGIN POLICY DOCUMENT -----
+{policy_text}
+----- END POLICY DOCUMENT -----
 
-        "limits_and_deductibles": {
-            "property_limit": "",
-            "liability_limit": "",
-            "business_interruption_limit": "",
-            "deductibles": "",
-            "waiting_period_bi": ""
-        },
+Return a JSON object with exactly this structure:
 
-        "sublimits": {
-            "spoilage": "",
-            "electronics": "",
-            "signage": "",
-            "other": []
-        },
+{{
+  "policy_data": {{
+    "policy_metadata": {{
+      "policy_type": "",
+      "named_insured": "",
+      "effective_dates": "",
+      "locations_insured": [],
+      "industry_description": "",
+      "naics_or_class_code": ""
+    }},
+    "coverages_present": {{
+      "property": false,
+      "general_liability": false,
+      "business_interruption": false,
+      "extra_expense": false,
+      "equipment_breakdown": false,
+      "cyber": false,
+      "flood": false,
+      "earthquake": false
+    }},
+    "limits_and_deductibles": {{
+      "property_limit": "",
+      "liability_limit": "",
+      "business_interruption_limit": "",
+      "deductibles": "",
+      "waiting_period_bi": ""
+    }},
+    "sublimits": {{
+      "spoilage": "",
+      "electronics": "",
+      "signage": "",
+      "other": []
+    }},
+    "exclusions_detected": [],
+    "endorsements_already_attached": []
+  }},
 
-        "exclusions_detected": [],
+  "operational_risk_factors": {{
+    "handles_perishable_goods": false,
+    "relies_on_refrigeration": false,
+    "hosts_events_or_depends_on_events": false,
+    "provides_professional_services_or_advice": false,
+    "handles_sensitive_customer_data": false,
+    "depends_heavily_on_utilities": false,
+    "uses_specialized_equipment_or_machinery": false,
+    "single_location_dependency": false
+  }},
 
-        "endorsements_already_attached": []
-        }
+  "coverage_gaps": [
+    {{
+      "risk": "",
+      "why_gap_exists": "",
+      "evidence_from_policy": ""
+    }}
+  ],
 
-        -----------------------------
-        STEP 2 — BUSINESS OPERATIONS SIGNALS
-        -----------------------------
+  "endorsement_recommendations": [
+    {{
+      "endorsement_name": "",
+      "priority": "HIGH",
+      "reason_for_recommendation": "",
+      "risk_if_not_added": "",
+      "evidence_from_document": ""
+    }}
+  ]
+}}
 
-        From descriptions, forms, or schedules, infer:
+Allowed endorsements: Utility Service Interruption, Spoilage Coverage,
+Event Cancellation, Errors & Omissions (E&O), Cyber Liability,
+Equipment Breakdown, Contingent Business Interruption, Flood (separate policy),
+Ordinance or Law, Data Breach Response.
 
-        {
-        "operational_risk_factors": {
-            "handles_perishable_goods": true/false/UNKNOWN,
-            "relies_on_refrigeration": true/false/UNKNOWN,
-            "hosts_events_or_depends_on_events": true/false/UNKNOWN,
-            "provides_professional_services_or_advice": true/false/UNKNOWN,
-            "handles_sensitive_customer_data": true/false/UNKNOWN,
-            "depends_heavily_on_utilities": true/false/UNKNOWN,
-            "uses_specialized_equipment_or_machinery": true/false/UNKNOWN,
-            "single_location_dependency": true/false/UNKNOWN
-        }
-        }
+Priority logic:
+  HIGH   = Business operations depend on this exposure AND policy does not cover it
+  MEDIUM = Partial coverage or moderate exposure
+  LOW    = Edge-case or limited exposure
 
-        Only mark TRUE if supported by document evidence.
+Return ONLY the JSON object. No markdown fences, no explanation."""
 
-        -----------------------------
-        STEP 3 — COVERAGE GAP ANALYSIS
-        -----------------------------
+            logger.info(f"Calling Claude API for gap analysis (model: {self.model})")
+            logger.info(f"Gap analysis prompt length: {len(prompt)} characters")
 
-        Identify where risk factors exist but coverage is missing or limited.
-
-        {
-        "coverage_gaps": [
-            {
-            "risk": "",
-            "why_gap_exists": "",
-            "evidence_from_policy": ""
-            }
-        ]
-        }
-
-        -----------------------------
-        STEP 4 — ENDORSEMENT RECOMMENDATIONS
-        -----------------------------
-
-        Map gaps to endorsements.
-
-        Allowed endorsements to recommend:
-
-        - Utility Service Interruption
-        - Spoilage Coverage
-        - Event Cancellation
-        - Errors & Omissions (E&O)
-        - Cyber Liability
-        - Equipment Breakdown
-        - Contingent Business Interruption
-        - Flood (separate policy)
-        - Ordinance or Law
-        - Data Breach Response
-
-        Output:
-
-        {
-        "endorsement_recommendations": [
-            {
-            "endorsement_name": "",
-            "priority": "HIGH | MEDIUM | LOW",
-            "reason_for_recommendation": "",
-            "risk_if_not_added": "",
-            "evidence_from_document": ""
-            }
-        ]
-        }
-
-        Priority logic:
-        HIGH = Business operations depend on this exposure AND policy does not cover it
-        MEDIUM = Partial coverage or moderate exposure
-        LOW = Edge-case or limited exposure
-
-        -----------------------------
-        STEP 5 — FINAL OUTPUT FORMAT
-        -----------------------------
-
-        Return:
-
-        {
-        "policy_data": {...},
-        "operational_risk_factors": {...},
-        "coverage_gaps": [...],
-        "endorsement_recommendations": [...]
-        }
-    """
-        message = self.client.messages.create(
+            message = self.client.messages.create(
                 model=self.model,
                 max_tokens=self.max_tokens,
                 temperature=self.temperature,
-                messages=[
-                    {
-                        "role": "user",
-                        "content": prompt
-                    }
-                ]
-        )
+                messages=[{"role": "user", "content": prompt}],
+            )
 
-        return message
+            response_text = message.content[0].text if message.content else ""
+
+            logger.info(
+                f"Claude gap analysis raw response length: {len(response_text)} chars"
+            )
+            logger.debug(
+                f"Claude gap analysis raw response (first 500 chars): "
+                f"{response_text[:500]}"
+            )
+
+            if not response_text or not response_text.strip():
+                raise Exception(
+                    "Claude returned an empty response for gap analysis. "
+                    f"Stop reason: {message.stop_reason}, "
+                    f"usage: {message.usage.input_tokens} in / "
+                    f"{message.usage.output_tokens} out"
+                )
+
+            logger.info(
+                f"Usage: {message.usage.input_tokens} input tokens, "
+                f"{message.usage.output_tokens} output tokens"
+            )
+
+            parsed = self._parse_json_response(response_text)
+            return parsed
+
+        except Exception as e:
+            logger.error(f"Gap analysis Claude call failed: {e}")
+            raise Exception(f"Gap analysis failed: {str(e)}")
     def compare_policies(
         self,
         baseline_text: str,

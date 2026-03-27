@@ -235,16 +235,16 @@ class AnalysisProcessor:
             policy_text = policy_result["text"]
             logger.info(f"[{job_id}] Extracted policy text: {len(policy_text)} characters")
 
-            # Run Claude endorsement / gap analysis
+            # Run Claude gap analysis
             with get_db_context() as db:
                 job = db.query(AnalysisJob).filter(AnalysisJob.id == job_id).first()
+                risk_profile = job.risk_profile_data
                 job.update_progress(50, "Analyzing coverage gaps with AI...")
                 db.commit()
 
-            claude_response = claude_service.endorsement_prompt(policy_text)
-            import json
-            response_text = claude_response.content[0].text
-            claude_data = json.loads(response_text)
+            claude_data = claude_service.analyze_gap_coverage(
+                policy_text, risk_profile=risk_profile
+            )
             logger.info(f"[{job_id}] Claude gap analysis completed")
 
             # Build gap items from coverage_gaps + endorsement_recommendations
