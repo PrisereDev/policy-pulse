@@ -39,7 +39,9 @@ function HistoryContent() {
     .filter((analysis: AnalysisJob) => {
       const matchesSearch = 
         analysis.baseline_filename.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        analysis.renewal_filename.toLowerCase().includes(searchQuery.toLowerCase());
+        (analysis.renewal_filename ?? "")
+          .toLowerCase()
+          .includes(searchQuery.toLowerCase());
       const matchesStatus = statusFilter === "all" || analysis.status === statusFilter;
       return matchesSearch && matchesStatus;
     })

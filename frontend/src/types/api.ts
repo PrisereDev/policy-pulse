@@ -14,7 +14,8 @@ export interface AnalysisJob {
   created_at: string;
   updated_at: string;
   baseline_filename: string;
-  renewal_filename: string;
+  /** Absent or empty for gap-only (single-policy) analyses */
+  renewal_filename?: string | null;
   estimated_completion_time?: string;
   error_message?: string;
 }

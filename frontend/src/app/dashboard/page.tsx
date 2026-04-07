@@ -43,8 +43,6 @@ import {
   CheckCircle,
   ChevronDown,
   MapPin,
-  ShieldAlert,
-  Calendar,
   Plus,
   FileText,
   Clock,
@@ -54,6 +52,11 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { formatDistanceToNow } from "date-fns";
+
+/** Single-policy gap analyses have no renewal file; renewals always have a renewal filename. */
+function isGapAnalysisJob(a: AnalysisJob): boolean {
+  return !a.renewal_filename || String(a.renewal_filename).trim() === "";
+}
 
 // ---------------------------------------------------------------------------
 // GapCard — identical to the former gap-results page version
@@ -116,10 +119,10 @@ function GapCard({
               className={
                 isCovered
                   ? "bg-prisere-teal/10 text-prisere-teal border-prisere-teal/30 hover:bg-prisere-teal/10"
-                  : "bg-prisere-maroon/10 text-prisere-maroon border-prisere-maroon/30 hover:bg-prisere-maroon/10"
+                  : "bg-rose-100/90 text-prisere-maroon border-rose-200/80 hover:bg-rose-100/90 font-normal"
               }
             >
-              {isCovered ? "COVERED" : "NOT COVERED"}
+              {isCovered ? "Covered" : "Not covered"}
             </Badge>
             <ChevronDown
               className={`h-4 w-4 text-gray-400 transition-transform ${
@@ -217,119 +220,6 @@ function RenewalUploadSection() {
         )}
       </Button>
     </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Business profile card (from Clerk metadata)
-// ---------------------------------------------------------------------------
-
-function BusinessProfileCard({
-  onEditProfile,
-}: {
-  onEditProfile: () => void;
-}) {
-  const { user } = useUser();
-
-  const answers = user?.unsafeMetadata?.onboardingAnswers as
-    | Record<string, unknown>
-    | undefined;
-  const locations = user?.unsafeMetadata?.businessLocations as
-    | Array<{ address: string; isPrimary: boolean }>
-    | undefined;
-
-  if (!answers) return null;
-
-  const riskFactors: { label: string; value: string }[] = [];
-
-  if (answers.climate === true)
-    riskFactors.push({
-      label: "Climate-controlled inventory",
-      value: "Yes",
-    });
-  if (answers.events === true)
-    riskFactors.push({
-      label: "Revenue depends on nearby events",
-      value: "Yes",
-    });
-  if (answers.professionalServices === true)
-    riskFactors.push({
-      label: "Provides professional services",
-      value: "Yes",
-    });
-  if (answers.payments === true)
-    riskFactors.push({
-      label: "Handles data/payments digitally",
-      value: "Yes",
-    });
-  else if (answers.payments === false)
-    riskFactors.push({
-      label: "Handles data/payments",
-      value: "Mostly in-person / cash",
-    });
-
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle
-          className="text-base"
-          style={{ fontFamily: "var(--font-heading)" }}
-        >
-          Business Profile
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        {locations && locations.length > 0 && (
-          <div>
-            <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">
-              Locations
-            </p>
-            <div className="space-y-1.5">
-              {locations.map((loc) => (
-                <div
-                  key={loc.address}
-                  className="flex items-center gap-2 text-sm text-prisere-dark-gray"
-                >
-                  <MapPin className="h-3.5 w-3.5 text-prisere-maroon flex-shrink-0" />
-                  <span>{loc.address}</span>
-                  {loc.isPrimary && (
-                    <span className="text-xs text-gray-400">(primary)</span>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {riskFactors.length > 0 && (
-          <div>
-            <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">
-              Risk Factors
-            </p>
-            <div className="space-y-1.5">
-              {riskFactors.map((rf) => (
-                <div
-                  key={rf.label}
-                  className="flex items-center justify-between text-sm"
-                >
-                  <span className="text-gray-600">{rf.label}</span>
-                  <span className="font-medium text-prisere-dark-gray">
-                    {rf.value}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-        <button
-          type="button"
-          onClick={onEditProfile}
-          className="text-sm text-prisere-maroon hover:text-prisere-maroon/80 font-medium mt-2 underline underline-offset-2"
-        >
-          Edit profile
-        </button>
-      </CardContent>
-    </Card>
   );
 }
 
@@ -708,40 +598,35 @@ function StatTiles({
   daysUntilExpiry: number | null;
 }) {
   return (
-    <div className="grid gap-4 grid-cols-2 lg:grid-cols-3">
-      <Card>
-        <CardContent className="p-4 flex items-center gap-3">
-          <ShieldAlert className="h-5 w-5 text-prisere-maroon flex-shrink-0" />
-          <div>
-            <p className="text-2xl font-bold text-prisere-dark-gray">
-              {gapCount}
-            </p>
-            <p className="text-xs text-gray-500">Gaps found</p>
-          </div>
+    <div className="grid gap-4 grid-cols-1 sm:grid-cols-3">
+      <Card className="border-gray-200/90 bg-gray-100/80 shadow-none">
+        <CardContent className="p-5 text-center">
+          <p className="text-3xl font-semibold tabular-nums text-prisere-mustard">
+            {gapCount}
+          </p>
+          <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mt-1">
+            Gaps found
+          </p>
         </CardContent>
       </Card>
-      <Card>
-        <CardContent className="p-4 flex items-center gap-3">
-          <MapPin className="h-5 w-5 text-prisere-teal flex-shrink-0" />
-          <div>
-            <p className="text-2xl font-bold text-prisere-dark-gray">
-              {locationCount}
-            </p>
-            <p className="text-xs text-gray-500">
-              Location{locationCount !== 1 ? "s" : ""}
-            </p>
-          </div>
+      <Card className="border-gray-200/90 bg-gray-100/80 shadow-none">
+        <CardContent className="p-5 text-center">
+          <p className="text-3xl font-semibold tabular-nums text-prisere-mustard">
+            {locationCount}
+          </p>
+          <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mt-1">
+            Location{locationCount !== 1 ? "s" : ""}
+          </p>
         </CardContent>
       </Card>
-      <Card className="col-span-2 lg:col-span-1">
-        <CardContent className="p-4 flex items-center gap-3">
-          <Calendar className="h-5 w-5 text-prisere-mustard flex-shrink-0" />
-          <div>
-            <p className="text-2xl font-bold text-prisere-dark-gray">
-              {daysUntilExpiry !== null ? daysUntilExpiry : "—"}
-            </p>
-            <p className="text-xs text-gray-500">Days until expiry</p>
-          </div>
+      <Card className="border-gray-200/90 bg-gray-100/80 shadow-none sm:col-span-1 col-span-1">
+        <CardContent className="p-5 text-center">
+          <p className="text-3xl font-semibold tabular-nums text-prisere-mustard">
+            {daysUntilExpiry !== null ? `${daysUntilExpiry}d` : "—"}
+          </p>
+          <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mt-1">
+            Until expiry
+          </p>
         </CardContent>
       </Card>
     </div>
@@ -749,26 +634,135 @@ function StatTiles({
 }
 
 // ---------------------------------------------------------------------------
-// Renewal alert
+// Renewal countdown + upload CTA (prominence scales as expiry approaches)
 // ---------------------------------------------------------------------------
 
-function RenewalAlert({ daysAway, expiryDate }: { daysAway: number; expiryDate: string }) {
-  if (daysAway > 30) return null;
+const RENEWAL_UPLOAD_COPY =
+  "Upload your renewal quote to compare what changed and check if your gaps are covered.";
+
+function RenewalCountdownSection({
+  daysAway,
+}: {
+  /** When null/undefined, expiry headline is omitted; instructional text + button still show. */
+  daysAway?: number | null;
+}) {
+  const hasExpiry = typeof daysAway === "number" && !Number.isNaN(daysAway);
+
+  const urgency = !hasExpiry
+    ? "unknown"
+    : daysAway <= 14
+      ? "critical"
+      : daysAway <= 30
+        ? "high"
+        : daysAway <= 60
+          ? "medium"
+          : "low";
+
+  const uploadBtn = (
+    <Button
+      asChild
+      className="bg-prisere-maroon hover:bg-prisere-maroon/90 text-white w-fit shrink-0"
+    >
+      <Link href="/upload">Upload renewal quote</Link>
+    </Button>
+  );
+
+  const copy = (
+    <div className="min-w-0 flex-1">
+      {hasExpiry && (
+        <p
+          className={cn(
+            "font-semibold text-prisere-dark-gray",
+            urgency === "critical" && "text-lg"
+          )}
+        >
+          Your policy expires in {daysAway} day{daysAway !== 1 ? "s" : ""}.
+        </p>
+      )}
+      <p
+        className={cn(
+          "text-sm text-gray-600",
+          hasExpiry && "mt-1"
+        )}
+      >
+        {RENEWAL_UPLOAD_COPY}
+      </p>
+      <div className={cn(hasExpiry ? "mt-4" : "mt-1")}>{uploadBtn}</div>
+    </div>
+  );
+
+  const iconWrap = (
+    <div
+      className={cn(
+        "rounded-full p-2 flex-shrink-0 self-start",
+        urgency === "unknown" && "bg-amber-100",
+        urgency === "low" && "bg-gray-100",
+        urgency === "medium" && "bg-prisere-mustard/15",
+        (urgency === "high" || urgency === "critical") && "bg-amber-100"
+      )}
+    >
+      <AlertTriangle
+        className={cn(
+          "h-5 w-5",
+          urgency === "unknown" && "text-amber-700",
+          urgency === "low" && "text-gray-400",
+          urgency === "medium" && "text-prisere-mustard",
+          (urgency === "high" || urgency === "critical") && "text-amber-700"
+        )}
+      />
+    </div>
+  );
+
+  if (urgency === "unknown") {
+    return (
+      <Card className="border-amber-200/90 bg-amber-50/90 shadow-sm rounded-lg">
+        <CardContent className="p-6">
+          <div className="flex items-start gap-4">
+            {iconWrap}
+            {copy}
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (urgency === "low") {
+    return (
+      <div className="rounded-lg border border-gray-200 bg-white px-4 py-4">
+        <div className="flex items-start gap-3">
+          {iconWrap}
+          {copy}
+        </div>
+      </div>
+    );
+  }
+
+  if (urgency === "medium") {
+    return (
+      <Card className="border-prisere-mustard/35 bg-amber-50/50 shadow-sm">
+        <CardContent className="p-5">
+          <div className="flex items-start gap-4">
+            {iconWrap}
+            {copy}
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
 
   return (
-    <Card className="border-prisere-mustard/40 bg-prisere-mustard/10">
-      <CardContent className="p-5 flex items-start gap-4">
-        <div className="rounded-full bg-prisere-mustard/15 p-2 flex-shrink-0">
-          <AlertTriangle className="h-5 w-5 text-prisere-mustard" />
-        </div>
-        <div>
-          <p className="font-semibold text-prisere-dark-gray">
-            Your policy expires in {daysAway} day{daysAway !== 1 ? "s" : ""}
-          </p>
-          <p className="text-sm text-gray-600 mt-0.5">
-            Expires {expiryDate}. Upload your renewal quote to compare what
-            changed.
-          </p>
+    <Card
+      className={cn(
+        "border-amber-200/90 shadow-md",
+        urgency === "critical"
+          ? "bg-amber-50 ring-2 ring-amber-300/60"
+          : "bg-amber-50/90"
+      )}
+    >
+      <CardContent className="p-6">
+        <div className="flex items-start gap-4">
+          {iconWrap}
+          {copy}
         </div>
       </CardContent>
     </Card>
@@ -806,22 +800,41 @@ function AnalysisHistoryRow({ analysis }: { analysis: AnalysisJob }) {
   const timeAgo = formatDistanceToNow(new Date(analysis.created_at), {
     addSuffix: true,
   });
+  const gap = isGapAnalysisJob(analysis);
+  const title = gap ? "Coverage gap analysis" : "Renewal comparison";
+  const detailLine = gap
+    ? `${analysis.baseline_filename}`
+    : `${analysis.baseline_filename} · ${analysis.renewal_filename ?? "renewal"}`;
+
   const href =
     analysis.status === "completed"
-      ? `/results/${analysis.job_id}`
+      ? gap
+        ? `/scan-complete/${analysis.job_id}`
+        : `/results/${analysis.job_id}`
       : analysis.status === "processing"
-        ? `/analysis/${analysis.job_id}`
+        ? gap
+          ? `/analysis/${analysis.job_id}?type=gap`
+          : `/analysis/${analysis.job_id}`
         : undefined;
 
   return (
-    <div className="flex items-center justify-between py-3 border-b last:border-b-0">
+    <div className="flex items-center justify-between py-4 border-b last:border-b-0 border-gray-100">
       <div className="flex items-center gap-3 min-w-0">
         <FileText className="h-4 w-4 text-gray-400 flex-shrink-0" />
         <div className="min-w-0">
-          <p className="text-sm font-medium text-prisere-dark-gray truncate">
-            {analysis.baseline_filename}
-          </p>
-          <p className="text-xs text-gray-500">{timeAgo}</p>
+          <div className="flex items-center gap-2 flex-wrap">
+            <p className="text-sm font-semibold text-prisere-dark-gray">
+              {title}
+            </p>
+            <Badge
+              variant="outline"
+              className="text-[10px] uppercase tracking-wide border-gray-200 text-gray-500 font-normal"
+            >
+              {gap ? "Gap" : "Renewal"}
+            </Badge>
+          </div>
+          <p className="text-xs text-gray-500 truncate mt-0.5">{detailLine}</p>
+          <p className="text-xs text-gray-400 mt-0.5">{timeAgo}</p>
         </div>
       </div>
       <div className="flex items-center gap-3 flex-shrink-0">
@@ -832,7 +845,7 @@ function AnalysisHistoryRow({ analysis }: { analysis: AnalysisJob }) {
         {href && (
           <Link
             href={href}
-            className="text-xs text-prisere-maroon hover:text-prisere-maroon/80 font-medium"
+            className="text-sm text-prisere-maroon hover:text-prisere-maroon/80 font-medium underline underline-offset-2"
           >
             View
           </Link>
@@ -882,17 +895,28 @@ function DashboardContent() {
   }, [skipGapQuery, router]);
 
   const latestGapJob = useMemo(() => {
-    return analyses.find(
-      (a: AnalysisJob) => a.status === "completed" && !a.renewal_filename
+    const completedGaps = analyses.filter(
+      (a: AnalysisJob) =>
+        a.status === "completed" && isGapAnalysisJob(a)
     );
+    if (completedGaps.length === 0) return undefined;
+    return [...completedGaps].sort(
+      (a, b) =>
+        new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+    )[0];
   }, [analyses]);
+
+  const gapJobId = latestGapJob?.job_id ?? "";
+  const gapQueryEnabled = !!latestGapJob;
 
   const {
     data: gapResult,
     isLoading: gapLoading,
-  } = useGapAnalysisResult(latestGapJob?.job_id ?? "", !!latestGapJob);
+    isError: gapResultError,
+  } = useGapAnalysisResult(gapJobId, gapQueryEnabled);
 
   const isFirstVisit = isNewParam || analyses.length <= 1;
+  const isReturningGapRecap = !!(latestGapJob && gapResult);
 
   const locations = (user?.unsafeMetadata?.businessLocations as
     | Array<{ address: string; isPrimary: boolean }>
@@ -920,8 +944,50 @@ function DashboardContent() {
     };
   }, [gapResult]);
 
+  const rawOnboarding = user?.unsafeMetadata?.hasCompletedOnboarding;
+  const onboardingDone =
+    rawOnboarding === true || String(rawOnboarding) === "true";
+  const hasNoHistory = analyses.length === 0;
+  const isS3Flow =
+    onboardingDone &&
+    (hasNoHistory ||
+      forceS3LayoutDev ||
+      skipGapQuery ||
+      skipGapAfterUpload);
+
+  const sortedDashboardGaps = useMemo((): CoverageGap[] => {
+    if (!gapResult?.gaps?.length) return [];
+    return [...gapResult.gaps].sort((a, b) => {
+      if (a.status === b.status) return 0;
+      return a.status === "not_covered" ? -1 : 1;
+    });
+  }, [gapResult]);
+
+  const pastAnalyses = analyses.filter(
+    (a: AnalysisJob) => a.job_id !== latestGapJob?.job_id
+  );
+
+  const onboardingAnswersMeta = user?.unsafeMetadata?.onboardingAnswers as
+    | Record<string, unknown>
+    | undefined;
+  const recapBusinessName =
+    gapResult?.business_name?.trim() ||
+    (user?.unsafeMetadata?.businessName as string | undefined) ||
+    (typeof onboardingAnswersMeta?.businessName === "string"
+      ? onboardingAnswersMeta.businessName
+      : undefined) ||
+    (user?.firstName ? `${user.firstName}'s business` : "Your business");
+
+  const lastAnalyzedLabel = latestGapJob
+    ? new Date(latestGapJob.created_at).toLocaleDateString("en-US", {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+      })
+    : null;
+
   // Only block on gap result fetch when we actually have a gap job to load
-  const gapResultNeeded = !!latestGapJob;
+  const gapResultNeeded = gapQueryEnabled;
   if (historyLoading || (gapResultNeeded && gapLoading)) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -935,33 +1001,27 @@ function DashboardContent() {
 
   if (historyError) throw historyError;
 
-  const rawOnboarding = user?.unsafeMetadata?.hasCompletedOnboarding;
-  const onboardingDone =
-    rawOnboarding === true || String(rawOnboarding) === "true";
-  const hasNoHistory = analyses.length === 0;
+  if (gapResultNeeded && gapResultError) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center px-6">
+        <div className="max-w-md text-center rounded-lg border border-red-200 bg-red-50/80 p-8">
+          <p className="font-semibold text-prisere-dark-gray">
+            Couldn&apos;t load gap analysis
+          </p>
+          <p className="text-sm text-gray-600 mt-2">
+            Refresh the page or try again in a moment. If this persists, start a
+            new gap analysis from your profile.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   /**
    * Gap-first dashboard when: onboarding done and (no jobs yet, or dev preview),
    * OR user just used "Skip for now" (session + URL) so we show it even if they
    * have older analysis rows from prior sessions.
    */
-  const isS3Flow =
-    onboardingDone &&
-    (hasNoHistory ||
-      forceS3LayoutDev ||
-      skipGapQuery ||
-      skipGapAfterUpload);
-
-  const notCoveredGaps = gapResult
-    ? gapResult.gaps.filter((g) => g.status === "not_covered")
-    : [];
-  const coveredGaps = gapResult
-    ? gapResult.gaps.filter((g) => g.status === "covered")
-    : [];
-
-  const pastAnalyses = analyses.filter(
-    (a: AnalysisJob) => a.job_id !== latestGapJob?.job_id
-  );
-
   return (
     <div className="min-h-screen bg-gray-50">
       <header className="border-b bg-white px-6 py-4">
@@ -983,16 +1043,20 @@ function DashboardContent() {
             title={
               isS3Flow
                 ? `Welcome${user?.firstName ? `, ${user.firstName}` : ""}`
-                : isFirstVisit
-                  ? `Welcome${user?.firstName ? `, ${user.firstName}` : ""}!`
-                  : `Welcome back${user?.firstName ? `, ${user.firstName}` : ""}!`
+                : isReturningGapRecap
+                  ? `Welcome back${user?.firstName ? `, ${user.firstName}` : ""}`
+                  : isFirstVisit
+                    ? `Welcome${user?.firstName ? `, ${user.firstName}` : ""}!`
+                    : `Welcome back${user?.firstName ? `, ${user.firstName}` : ""}!`
             }
             subtitle={
               isS3Flow
                 ? "You're almost there. Upload your policy to see where you might be exposed."
-                : isFirstVisit
-                  ? "Here's what we found in your policy"
-                  : "Your coverage overview at a glance"
+                : isReturningGapRecap && lastAnalyzedLabel
+                  ? `${recapBusinessName} — Last analyzed ${lastAnalyzedLabel}`
+                  : isFirstVisit
+                    ? "Here's what we found in your policy"
+                    : "Your coverage overview at a glance"
             }
           />
         </div>
@@ -1020,98 +1084,99 @@ function DashboardContent() {
                 onAnalysisStarted={() => setProfileUpdatedBanner(false)}
               />
             )}
-            {/* ---- Returning visit: Renewal alert ---- */}
-            {!isFirstVisit && expiryInfo && expiryInfo.daysAway <= 30 && (
-              <div className="mb-6">
-                <RenewalAlert
-                  daysAway={expiryInfo.daysAway}
-                  expiryDate={expiryInfo.formatted}
-                />
-              </div>
+
+            {/* ---- S4: Gap recap (most recent completed gap job + useGapAnalysisResult) ---- */}
+            {isReturningGapRecap && (
+              <>
+                <div className="mb-6">
+                  <StatTiles
+                    gapCount={gapCount}
+                    locationCount={locations.length || 1}
+                    daysUntilExpiry={expiryInfo?.daysAway ?? null}
+                  />
+                </div>
+
+                <div className="mb-8">
+                  <RenewalCountdownSection
+                    daysAway={expiryInfo?.daysAway ?? null}
+                  />
+                </div>
+
+                <div className="mb-8">
+                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-widest mb-3">
+                    Coverage gaps
+                  </p>
+                  <div className="space-y-3 rounded-xl border border-gray-200/80 bg-white p-4 sm:p-5">
+                    {sortedDashboardGaps.length === 0 ? (
+                      <p className="text-sm text-gray-500 text-center py-4">
+                        No individual gaps were flagged in this run.
+                      </p>
+                    ) : (
+                      sortedDashboardGaps.map((g, idx) => (
+                        <GapCard
+                          key={`${g.type}-${g.title}-${idx}`}
+                          gap={g}
+                          defaultExpanded={false}
+                        />
+                      ))
+                    )}
+                  </div>
+                </div>
+              </>
             )}
 
-            {/* ---- 1) Start New Comparison ---- */}
-            <Card className="mb-8 border-2 border-prisere-maroon/20 bg-prisere-maroon/5">
-              <CardContent className="p-8">
-                <div className="text-center">
-                  <div className="rounded-full bg-prisere-maroon/10 p-4 w-16 h-16 mx-auto mb-4 flex items-center justify-center">
-                    <Plus className="h-8 w-8 text-prisere-maroon" />
-                  </div>
-                  <h2 className="text-2xl font-semibold mb-2" style={{ fontFamily: "var(--font-heading)" }}>
-                    Compare Your Insurance Renewal
-                  </h2>
-                  <p className="text-gray-600 mb-6 max-w-md mx-auto">
-                    Upload your current policy and renewal quote to get a plain-language comparison of what changed
-                  </p>
-                  <Button asChild size="lg" className="bg-prisere-maroon hover:bg-prisere-maroon/90">
-                    <Link href="/upload">
-                      <Plus className="h-5 w-5 mr-2" />
-                      Start New Comparison
-                    </Link>
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* ---- 2) Latest coverage gap analysis summary ---- */}
-            {gapResult && (notCoveredGaps.length > 0 || coveredGaps.length > 0) && (
-              <div className="mb-8">
-                <div className="flex items-center justify-between mb-4">
-                  <h2
-                    className="text-lg font-semibold text-prisere-dark-gray"
-                    style={{ fontFamily: "var(--font-heading)" }}
-                  >
-                    Latest Coverage Gap Analysis
-                  </h2>
-                  {latestGapJob && (
-                    <span className="text-sm text-gray-500">
-                      {new Date(latestGapJob.created_at).toLocaleDateString("en-US", {
-                        month: "long",
-                        day: "numeric",
-                        year: "numeric",
-                      })}
-                    </span>
-                  )}
-                </div>
-
-                <StatTiles
-                  gapCount={gapCount}
-                  locationCount={locations.length || 1}
-                  daysUntilExpiry={expiryInfo?.daysAway ?? null}
-                />
-
-                {latestGapJob && (
-                  <div className="mt-4 text-center">
-                    <Button asChild variant="outline">
-                      <Link href={`/results/${latestGapJob.job_id}`}>
-                        View Full Analysis Details
-                        <ArrowRight className="ml-2 h-4 w-4" />
+            {/* ---- Renewal comparison CTA when no gap recap to anchor the page ---- */}
+            {!isReturningGapRecap && (
+              <Card className="mb-8 border-2 border-prisere-maroon/20 bg-prisere-maroon/5">
+                <CardContent className="p-8">
+                  <div className="text-center">
+                    <div className="rounded-full bg-prisere-maroon/10 p-4 w-16 h-16 mx-auto mb-4 flex items-center justify-center">
+                      <Plus className="h-8 w-8 text-prisere-maroon" />
+                    </div>
+                    <h2
+                      className="text-2xl font-semibold mb-2"
+                      style={{ fontFamily: "var(--font-heading)" }}
+                    >
+                      Compare your insurance renewal
+                    </h2>
+                    <p className="text-gray-600 mb-6 max-w-md mx-auto text-sm">
+                      Upload your current policy and renewal quote for a
+                      plain-language comparison of what changed.
+                    </p>
+                    <Button
+                      asChild
+                      size="lg"
+                      className="bg-prisere-maroon hover:bg-prisere-maroon/90"
+                    >
+                      <Link href="/upload">
+                        <Plus className="h-5 w-5 mr-2" />
+                        Start new comparison
                       </Link>
                     </Button>
                   </div>
-                )}
-              </div>
+                </CardContent>
+              </Card>
             )}
 
-            {/* ---- 3) Business profile & risk factors ---- */}
+            {/* ---- Business profile + risk factors (two-column, matches reference) ---- */}
             <div className="mb-8">
-              <BusinessProfileCard
+              <RiskProfileSummary
                 onEditProfile={() => setProfileModalOpen(true)}
               />
             </div>
 
-            {/* ---- 4) Past analyses ---- */}
+            {/* ---- Past analyses: gap + renewal, labeled ---- */}
             {pastAnalyses.length > 0 && (
-              <Card>
-                <CardHeader>
+              <Card className="border-gray-200/90 shadow-sm">
+                <CardHeader className="pb-2">
                   <CardTitle
-                    className="text-base"
+                    className="text-xs font-semibold text-gray-500 uppercase tracking-widest"
                     style={{ fontFamily: "var(--font-heading)" }}
                   >
-                    Past Analyses
+                    Past analyses
                   </CardTitle>
                 </CardHeader>
-                <CardContent>
+                <CardContent className="pt-0">
                   {pastAnalyses.map((a: AnalysisJob) => (
                     <AnalysisHistoryRow key={a.job_id} analysis={a} />
                   ))}
