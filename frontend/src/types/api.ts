@@ -24,6 +24,7 @@ export interface CoverageGap {
   status: "covered" | "not_covered";
   title: string;
   explanation: string;
+  affected_locations?: string[];
 }
 
 export interface GapAnalysisResult {

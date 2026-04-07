@@ -74,7 +74,7 @@ function ResultsContent({ params }: { params: Promise<{ jobId: string }> }) {
     if (expandedItems.length === result?.changes.length) {
       setExpandedItems([]);
     } else {
-      setExpandedItems(result?.changes.map(c => c.id) || []);
+      setExpandedItems(result?.changes.map((c, i) => c.id || `change-${i}`) || []);
     }
   };
 
@@ -167,13 +167,14 @@ function ResultsContent({ params }: { params: Promise<{ jobId: string }> }) {
               </div>
           
               <div className="space-y-3">
-                {result.changes.map((change) => {
-                  const isExpanded = expandedItems.includes(change.id);
+                {result.changes.map((change, index) => {
+                  const changeKey = change.id || `change-${index}`;
+                  const isExpanded = expandedItems.includes(changeKey);
                   const impact = getChangeImpact(change.category, change.change_type);
                   
                   return (
                     <Card 
-                      key={change.id} 
+                      key={changeKey} 
                       className={`border-l-4 transition-all ${
                         impact === 'bad' 
                           ? 'border-l-prisere-maroon bg-white' 
@@ -187,9 +188,9 @@ function ResultsContent({ params }: { params: Promise<{ jobId: string }> }) {
                           className="flex items-center justify-between cursor-pointer"
                           onClick={() => {
                             setExpandedItems(prev => 
-                              prev.includes(change.id) 
-                                ? prev.filter(id => id !== change.id)
-                                : [...prev, change.id]
+                              prev.includes(changeKey) 
+                                ? prev.filter(id => id !== changeKey)
+                                : [...prev, changeKey]
                             );
                           }}
                         >

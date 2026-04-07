@@ -90,10 +90,17 @@ class AnalysisListItem(BaseModel):
         from_attributes = True
 
 
+class BusinessLocation(BaseModel):
+    """Schema for a single business location."""
+    address: str
+    isPrimary: bool = False
+
+
 class GapAnalysisCreateRequest(BaseModel):
     """Request schema for creating a gap analysis job."""
     policy_s3_key: str = Field(..., description="S3 key for the uploaded policy PDF")
     risk_profile: Dict[str, Any] = Field(..., description="Risk profile data from onboarding")
+    business_locations: Optional[List[BusinessLocation]] = Field(None, description="Business locations from onboarding")
 
 
 class CoverageGapItem(BaseModel):
@@ -102,6 +109,7 @@ class CoverageGapItem(BaseModel):
     status: str  # "covered" or "not_covered"
     title: str
     explanation: str
+    affected_locations: Optional[List[str]] = None
 
 
 class GapAnalysisResultResponse(BaseModel):

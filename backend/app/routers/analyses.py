@@ -318,13 +318,19 @@ async def create_gap_analysis(
 
         policy_filename = request.policy_s3_key.split("/")[-1]
 
+        risk_data = dict(request.risk_profile)
+        if request.business_locations:
+            risk_data["business_locations"] = [
+                loc.model_dump() for loc in request.business_locations
+            ]
+
         job = AnalysisJob(
             user_id=user.id,
             job_type="gap_analysis",
             status=JobStatus.PENDING,
             baseline_s3_key=request.policy_s3_key,
             baseline_filename=policy_filename,
-            risk_profile_data=request.risk_profile,
+            risk_profile_data=risk_data,
             progress=0,
             status_message="Gap analysis job created, waiting to start...",
         )

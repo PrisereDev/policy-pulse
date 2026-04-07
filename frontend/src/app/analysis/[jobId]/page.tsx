@@ -47,7 +47,7 @@ export default function AnalysisPage({ params }: { params: Promise<{ jobId: stri
   useEffect(() => {
     if (isCompleted && result) {
       const destination = isGap
-        ? `/gap-results/${resolvedParams.jobId}`
+        ? `/dashboard?new=true`
         : `/results/${resolvedParams.jobId}`;
       router.push(destination);
       return;

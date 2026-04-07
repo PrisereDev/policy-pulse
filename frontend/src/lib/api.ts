@@ -1,7 +1,6 @@
 import { AnalysisJob, AnalysisResult, GapAnalysisResult } from "@/types/api";
 
-// API routes are now part of the Next.js app
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://prisere-backend.onrender.com/v1';
+const API_BASE_URL = '/api/v1';
 
 export class ApiError extends Error {
   constructor(
@@ -11,6 +10,38 @@ export class ApiError extends Error {
   ) {
     super(message);
     this.name = "ApiError";
+  }
+}
+
+/** FastAPI often returns `detail` as a string or a validation error list. */
+function formatErrorDetail(detail: unknown): string | undefined {
+  if (detail == null) return undefined;
+  if (typeof detail === "string") return detail;
+  if (Array.isArray(detail)) {
+    const parts = detail.map((item) => {
+      if (item && typeof item === "object" && "msg" in item) {
+        const loc = (item as { loc?: unknown }).loc;
+        const msg = String((item as { msg: unknown }).msg);
+        if (Array.isArray(loc) && loc.length > 0) {
+          return `${loc.join(".")}: ${msg}`;
+        }
+        return msg;
+      }
+      try {
+        return JSON.stringify(item);
+      } catch {
+        return String(item);
+      }
+    });
+    return parts.join("; ");
+  }
+  if (typeof detail === "object" && "message" in detail) {
+    return String((detail as { message: unknown }).message);
+  }
+  try {
+    return JSON.stringify(detail);
+  } catch {
+    return String(detail);
   }
 }
 
@@ -34,12 +65,18 @@ async function apiRequest<T>(
     const response = await fetch(url, config);
     
     if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      throw new ApiError(
-        errorData.message || `HTTP ${response.status}: ${response.statusText}`,
-        response.status,
-        errorData.code
-      );
+      const errorData = await response.json().catch(() => ({})) as {
+        detail?: unknown;
+        message?: unknown;
+        code?: string;
+      };
+      const msg =
+        formatErrorDetail(errorData.detail) ??
+        (typeof errorData.message === "string"
+          ? errorData.message
+          : undefined) ??
+        `HTTP ${response.status}: ${response.statusText}`;
+      throw new ApiError(msg, response.status, errorData.code);
     }
 
     return await response.json();
@@ -190,18 +227,37 @@ export const analysisApi = {
   createGapAnalysis: async (
     policyS3Key: string,
     riskProfile: Record<string, unknown>,
-    token?: string | null
+    token?: string | null,
+    businessLocations?: Array<{ address: string; isPrimary: boolean }>,
   ): Promise<AnalysisJob> => {
     return apiRequest<AnalysisJob>("/analyses/gap", {
       method: "POST",
       body: JSON.stringify({
         policy_s3_key: policyS3Key,
         risk_profile: riskProfile,
+        business_locations: businessLocations,
       }),
     }, token);
   },
 
   getGapAnalysisResult: async (jobId: string, token?: string | null): Promise<GapAnalysisResult> => {
     return apiRequest<GapAnalysisResult>(`/analyses/${jobId}/gap-result`, {}, token);
+  },
+
+  updateUserRiskProfile: async (
+    body: {
+      onboarding_answers: Record<string, unknown>;
+      business_locations: Array<{ address: string; isPrimary: boolean }>;
+    },
+    token?: string | null
+  ): Promise<{
+    id: string;
+    email: string;
+    name: string | null;
+    company_name: string | null;
+    created_at: string;
+    updated_at: string;
+  }> => {
+    return apiRequest("/auth/me/risk-profile", { method: "PATCH", body: JSON.stringify(body) }, token);
   },
 };

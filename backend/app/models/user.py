@@ -1,4 +1,5 @@
 from sqlalchemy import Column, String, DateTime
+from sqlalchemy.dialects.postgresql import JSON
 from sqlalchemy.orm import relationship
 from datetime import datetime, timezone
 import uuid
@@ -20,7 +21,10 @@ class User(Base):
     email = Column(String(255), unique=True, nullable=False, index=True)
     name = Column(String(255), nullable=True)
     company_name = Column(String(255), nullable=True)
-    
+    # Mirrors Clerk unsafeMetadata onboarding snapshot (optional until user saves profile in app)
+    onboarding_answers = Column(JSON, nullable=True)
+    business_locations = Column(JSON, nullable=True)
+
     # Timestamps
     created_at = Column(DateTime, default=datetime.now(timezone.utc), nullable=False)
     updated_at = Column(DateTime, default=datetime.now(timezone.utc), onupdate=datetime.now(timezone.utc), nullable=False)

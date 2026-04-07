@@ -113,10 +113,11 @@ async def root():
 
 
 # Import and include routers
-from app.routers import auth, uploads, analyses
+from app.routers import analyses, auth, uploads, webhooks
 app.include_router(auth.router)
 app.include_router(uploads.router)
 app.include_router(analyses.router)
+app.include_router(webhooks.router)
 
 
 @app.on_event("startup")
@@ -139,6 +140,7 @@ if __name__ == "__main__":
         "app.main:app",
         host="0.0.0.0",
         port=settings.port,
-        reload=settings.environment == "development"
+        reload=settings.environment == "development",
+        reload_dirs=["app"] if settings.environment == "development" else None,
     )
 

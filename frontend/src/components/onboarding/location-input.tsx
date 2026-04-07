@@ -10,6 +10,8 @@ interface LocationInputProps {
   onChange: (value: string) => void;
   onKeyDown?: (e: React.KeyboardEvent<HTMLInputElement>) => void;
   placeholder?: string;
+  autoDetect?: boolean;
+  autoFocus?: boolean;
 }
 
 function loadGoogleMapsScript(): Promise<void> {
@@ -102,6 +104,8 @@ export function LocationInput({
   onChange,
   onKeyDown,
   placeholder,
+  autoDetect = true,
+  autoFocus: autoFocusProp = true,
 }: LocationInputProps) {
   const [mapsReady, setMapsReady] = useState(false);
   const [detecting, setDetecting] = useState(false);
@@ -110,6 +114,9 @@ export function LocationInput({
   >([]);
   const [showDropdown, setShowDropdown] = useState(false);
   const [activeIndex, setActiveIndex] = useState(-1);
+
+  const onChangeRef = useRef(onChange);
+  useEffect(() => { onChangeRef.current = onChange; }, [onChange]);
 
   const autocompleteRef =
     useRef<google.maps.places.AutocompleteService | null>(null);
@@ -136,7 +143,7 @@ export function LocationInput({
 
   // Feature 1: auto-detect location on mount (no Google dependency)
   useEffect(() => {
-    if (hasAutoDetected.current || !navigator.geolocation) return;
+    if (!autoDetect || hasAutoDetected.current || !navigator.geolocation) return;
     hasAutoDetected.current = true;
     setDetecting(true);
 
@@ -151,14 +158,14 @@ export function LocationInput({
               setDetecting(false);
               if (status === google.maps.GeocoderStatus.OK && results) {
                 const formatted = extractCityState(results);
-                if (formatted) onChange(formatted);
+                if (formatted) onChangeRef.current(formatted);
               }
             }
           );
         } else {
           const formatted = await reverseGeocodeNominatim(lat, lng);
           setDetecting(false);
-          if (formatted) onChange(formatted);
+          if (formatted) onChangeRef.current(formatted);
         }
       },
       () => {
@@ -166,7 +173,6 @@ export function LocationInput({
       },
       { timeout: 8000 }
     );
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Feature 2: debounced autocomplete
@@ -274,7 +280,7 @@ export function LocationInput({
         }}
         placeholder={placeholder}
         className="w-full px-4 py-3 border border-gray-300 rounded-md focus:border-prisere-maroon focus:ring-1 focus:ring-prisere-maroon focus:outline-none text-center"
-        autoFocus
+        autoFocus={autoFocusProp}
         autoComplete="off"
       />
 

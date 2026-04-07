@@ -250,12 +250,16 @@ class AnalysisProcessor:
             # Build gap items from coverage_gaps + endorsement_recommendations
             gaps = []
             for gap in claude_data.get("coverage_gaps", []):
-                gaps.append({
+                gap_item = {
                     "type": gap.get("risk", "unknown"),
                     "status": "not_covered",
                     "title": gap.get("risk", ""),
                     "explanation": gap.get("why_gap_exists", ""),
-                })
+                }
+                affected = gap.get("affected_locations", [])
+                if affected:
+                    gap_item["affected_locations"] = affected
+                gaps.append(gap_item)
 
             recommendations = []
             for rec in claude_data.get("endorsement_recommendations", []):

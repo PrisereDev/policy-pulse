@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { FileUploadCard } from "@/components/upload/file-upload-card";
 import { Shield, ArrowRight } from "lucide-react";
+import { setSkipGapUploadIntent } from "@/lib/prisere-dashboard-session";
 
 export default function OnboardingUploadPage() {
   const { isLoaded, userId } = useAuth();
@@ -31,6 +32,22 @@ export default function OnboardingUploadPage() {
       return undefined;
     }
   }, [clerkAnswers]);
+
+  const businessLocations = useMemo(() => {
+    const clerkLocations = user?.unsafeMetadata?.businessLocations as
+      | Array<{ address: string; isPrimary: boolean }>
+      | undefined;
+    if (clerkLocations) return clerkLocations;
+    if (typeof window === "undefined") return undefined;
+    try {
+      const stored = sessionStorage.getItem("businessLocations");
+      return stored
+        ? (JSON.parse(stored) as Array<{ address: string; isPrimary: boolean }>)
+        : undefined;
+    } catch {
+      return undefined;
+    }
+  }, [user?.unsafeMetadata?.businessLocations]);
 
   useEffect(() => {
     if (!isLoaded) return;
@@ -56,6 +73,7 @@ export default function OnboardingUploadPage() {
       const result = await createGapAnalysis.mutateAsync({
         policyFile,
         riskProfile: onboardingAnswers,
+        businessLocations,
       });
 
       await user?.update({
@@ -64,6 +82,7 @@ export default function OnboardingUploadPage() {
           hasCompletedOnboarding: true,
         },
       });
+      await user?.reload();
 
       router.push(`/analysis/${result.job_id}?type=gap`);
     } catch (error) {
@@ -134,7 +153,17 @@ export default function OnboardingUploadPage() {
         )}
 
         <button
-          onClick={() => router.push("/dashboard")}
+          onClick={async () => {
+            setSkipGapUploadIntent();
+            await user?.update({
+              unsafeMetadata: {
+                ...user.unsafeMetadata,
+                hasCompletedOnboarding: true,
+              },
+            });
+            await user?.reload();
+            router.push("/dashboard?skipGap=1");
+          }}
           className="mt-4 text-sm text-gray-500 hover:text-gray-700 underline"
         >
           Skip for now

@@ -1,5 +1,5 @@
 from pydantic import BaseModel, EmailStr, Field
-from typing import Optional
+from typing import Any, Dict, List, Optional
 from datetime import datetime
 
 
@@ -38,4 +38,16 @@ class UserProfile(UserResponse):
     
     class Config:
         from_attributes = True
+
+
+class BusinessLocationIn(BaseModel):
+    address: str
+    isPrimary: bool = False
+
+
+class UserRiskProfileUpdate(BaseModel):
+    """Risk / onboarding snapshot saved from the profile editor (Clerk + DB)."""
+
+    onboarding_answers: Dict[str, Any]
+    business_locations: List[BusinessLocationIn]
 

@@ -124,12 +124,26 @@ Return ONLY the JSON object, no additional text or explanation.
         try:
             risk_section = ""
             if risk_profile:
+                locations = risk_profile.get("business_locations", [])
+                profile_for_prompt = {
+                    k: v for k, v in risk_profile.items() if k != "business_locations"
+                }
                 risk_section = (
                     "\n\nADDITIONAL CONTEXT — RISK PROFILE FROM BUSINESS OWNER:\n"
-                    f"{json.dumps(risk_profile, indent=2)}\n"
+                    f"{json.dumps(profile_for_prompt, indent=2)}\n"
                     "Use this risk profile to cross-reference against the policy "
                     "when identifying coverage gaps.\n"
                 )
+                if locations:
+                    formatted = ", ".join(
+                        f"{loc['address']}{' (primary)' if loc.get('isPrimary') else ''}"
+                        for loc in locations
+                    )
+                    risk_section += (
+                        f"\nBUSINESS LOCATIONS:\n{formatted}\n"
+                        "Consider location-specific risks (e.g. flood zones, earthquake "
+                        "zones, coastal exposure) for EACH location individually.\n"
+                    )
 
             prompt = f"""You are an insurance underwriting analyst AI.
 
@@ -206,7 +220,8 @@ Return a JSON object with exactly this structure:
     {{
       "risk": "",
       "why_gap_exists": "",
-      "evidence_from_policy": ""
+      "evidence_from_policy": "",
+      "affected_locations": []
     }}
   ],
 
@@ -220,6 +235,13 @@ Return a JSON object with exactly this structure:
     }}
   ]
 }}
+
+LOCATION ATTRIBUTION RULES for coverage_gaps:
+- "affected_locations" is an array of address strings from the BUSINESS LOCATIONS list.
+- If a gap applies to ALL locations (or the risk is not location-specific), set
+  "affected_locations" to an empty array [].
+- If a gap applies only to SPECIFIC locations (e.g. one address is in a flood zone
+  but another is not), list ONLY the affected address strings.
 
 Allowed endorsements: Utility Service Interruption, Spoilage Coverage,
 Event Cancellation, Errors & Omissions (E&O), Cyber Liability,

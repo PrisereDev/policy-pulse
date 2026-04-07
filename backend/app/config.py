@@ -23,6 +23,8 @@ class Settings(BaseSettings):
     # Clerk Authentication
     clerk_secret_key: str
     clerk_publishable_key: str
+    # Webhook signing secret from Clerk Dashboard (whsec_...); required for POST /v1/webhooks/clerk
+    clerk_webhook_signing_secret: str = ""
     
     # Anthropic Claude API
     anthropic_api_key: str

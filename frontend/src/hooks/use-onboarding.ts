@@ -8,11 +8,14 @@ export function useOnboardingGuard() {
   const { user, isLoaded } = useUser();
   const router = useRouter();
 
-  const hasCompleted =
-    isLoaded && user?.unsafeMetadata?.hasCompletedOnboarding === true;
+  const raw = user?.unsafeMetadata?.hasCompletedOnboarding;
+  const completedFlag =
+    raw === true || String(raw) === "true";
+
+  const hasCompleted = isLoaded && completedFlag;
 
   const needsOnboarding =
-    isLoaded && !!user && !user.unsafeMetadata?.hasCompletedOnboarding;
+    isLoaded && !!user && !completedFlag;
 
   useEffect(() => {
     if (needsOnboarding) {

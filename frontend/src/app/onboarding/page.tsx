@@ -12,8 +12,10 @@ import {
   MapPin,
   Thermometer,
   Briefcase,
-  Shield,
+  Calendar,
   CreditCard,
+  X,
+  Plus,
 } from "lucide-react";
 import { LocationInput } from "@/components/onboarding/location-input";
 
@@ -24,6 +26,8 @@ interface Question {
   subtitle: string;
   type: "text" | "boolean";
   placeholder?: string;
+  trueLabel?: string;
+  falseLabel?: string;
 }
 
 const QUESTIONS: Question[] = [
@@ -39,13 +43,25 @@ const QUESTIONS: Question[] = [
   {
     id: "climate",
     icon: Thermometer,
-    title: "Does your inventory require refrigeration or climate control?",
+    title:
+      "Does your inventory require constant refrigeration or climate control?",
     subtitle:
       "Climate-sensitive inventory may need specific coverage for temperature-related losses.",
     type: "boolean",
   },
   {
     id: "events",
+    icon: Calendar,
+    title:
+      "Does your revenue depend on specific, scheduled events happening nearby?",
+    subtitle:
+      "Event-dependent revenue can create unique exposure if cancellations or disruptions occur.",
+    type: "boolean",
+    trueLabel: "Yes (e.g., festivals, games, graduations)",
+    falseLabel: "No",
+  },
+  {
+    id: "professionalServices",
     icon: Briefcase,
     title:
       "Do clients pay you for professional advice, designs, or technical services?",
@@ -54,20 +70,14 @@ const QUESTIONS: Question[] = [
     type: "boolean",
   },
   {
-    id: "errorsAndOmissions",
-    icon: Shield,
-    title: "Do you currently have Errors & Omissions (E&O) coverage?",
-    subtitle:
-      "E&O insurance protects against claims of professional mistakes or negligent advice.",
-    type: "boolean",
-  },
-  {
     id: "payments",
     icon: CreditCard,
-    title: "Do you handle customer data and payments digitally?",
+    title: "How do you handle customer data and payments?",
     subtitle:
-      "Digital transactions create cyber exposure that may require specialized coverage.",
+      "Your transaction method affects your cyber exposure and the type of coverage you may need.",
     type: "boolean",
+    trueLabel: "Mostly digital / online",
+    falseLabel: "Mostly in-person / cash",
   },
 ];
 
@@ -78,6 +88,11 @@ export default function OnboardingPage() {
   const [currentStep, setCurrentStep] = useState(0);
   const [answers, setAnswers] = useState<Record<string, string | boolean>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [hasMultipleLocations, setHasMultipleLocations] = useState<
+    boolean | undefined
+  >(undefined);
+  const [additionalLocations, setAdditionalLocations] = useState<string[]>([]);
+  const [showLocationSubView, setShowLocationSubView] = useState(false);
 
   const alreadyCompleted =
     isLoaded && !!user?.unsafeMetadata?.hasCompletedOnboarding;
@@ -101,19 +116,35 @@ export default function OnboardingPage() {
   const currentAnswer = answers[question.id];
 
   const canProceed =
-    question.type === "text"
-      ? typeof currentAnswer === "string" && currentAnswer.trim().length > 0
-      : currentAnswer !== undefined;
+    question.id === "location"
+      ? typeof currentAnswer === "string" &&
+        currentAnswer.trim().length > 0 &&
+        (hasMultipleLocations === false || showLocationSubView)
+      : question.type === "text"
+        ? typeof currentAnswer === "string" && currentAnswer.trim().length > 0
+        : currentAnswer !== undefined;
 
   const handleNext = async () => {
     if (isLastStep) {
       setIsSubmitting(true);
       try {
+        const businessLocations = [
+          { address: answers.location as string, isPrimary: true },
+          ...additionalLocations
+            .filter((loc) => loc.trim().length > 0)
+            .map((loc) => ({ address: loc, isPrimary: false })),
+        ];
+
         sessionStorage.setItem("onboardingAnswers", JSON.stringify(answers));
+        sessionStorage.setItem(
+          "businessLocations",
+          JSON.stringify(businessLocations)
+        );
         await user?.update({
           unsafeMetadata: {
             ...user.unsafeMetadata,
             onboardingAnswers: answers,
+            businessLocations,
           },
         });
         router.push("/onboarding/upload");
@@ -127,6 +158,10 @@ export default function OnboardingPage() {
   };
 
   const handleBack = () => {
+    if (showLocationSubView) {
+      setShowLocationSubView(false);
+      return;
+    }
     if (currentStep > 0) {
       setCurrentStep((prev) => prev - 1);
     }
@@ -178,74 +213,207 @@ export default function OnboardingPage() {
         {/* Question card */}
         <Card className="w-full shadow-md">
           <CardContent className="p-8">
-            <div className="flex flex-col items-center text-center">
-              <div className="rounded-full bg-prisere-maroon/10 p-4 w-16 h-16 mb-6 flex items-center justify-center">
-                <Icon className="h-8 w-8 text-prisere-maroon" />
-              </div>
-
-              <h2
-                className="text-xl font-bold text-prisere-dark-gray mb-2"
-                style={{ fontFamily: "var(--font-heading)" }}
-              >
-                {question.title}
-              </h2>
-              <p
-                className="text-gray-600 mb-8 text-sm"
-                style={{ fontFamily: "var(--font-body)" }}
-              >
-                {question.subtitle}
-              </p>
-
-              {question.type === "text" ? (
-                question.id === "location" ? (
-                  <LocationInput
-                    value={(currentAnswer as string) || ""}
-                    onChange={(v) => setAnswer(v)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" && canProceed) handleNext();
-                    }}
-                    placeholder={question.placeholder}
-                  />
-                ) : (
-                  <input
-                    type="text"
-                    value={(currentAnswer as string) || ""}
-                    onChange={(e) => setAnswer(e.target.value)}
-                    placeholder={question.placeholder}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-md focus:border-prisere-maroon focus:ring-1 focus:ring-prisere-maroon focus:outline-none text-center"
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" && canProceed) handleNext();
-                    }}
-                    autoFocus
-                  />
-                )
-              ) : (
-                <div className="flex gap-4 w-full">
-                  <Button
-                    variant={currentAnswer === true ? "default" : "outline"}
-                    className={`flex-1 h-12 text-base ${
-                      currentAnswer === true
-                        ? "bg-prisere-maroon hover:bg-prisere-maroon/90 text-white"
-                        : ""
-                    }`}
-                    onClick={() => setAnswer(true)}
-                  >
-                    Yes
-                  </Button>
-                  <Button
-                    variant={currentAnswer === false ? "default" : "outline"}
-                    className={`flex-1 h-12 text-base ${
-                      currentAnswer === false
-                        ? "bg-prisere-maroon hover:bg-prisere-maroon/90 text-white"
-                        : ""
-                    }`}
-                    onClick={() => setAnswer(false)}
-                  >
-                    No
-                  </Button>
+            {question.id === "location" && showLocationSubView ? (
+              <div className="flex flex-col items-center text-center w-full">
+                <div className="rounded-full bg-prisere-maroon/10 p-4 w-16 h-16 mb-6 flex items-center justify-center">
+                  <MapPin className="h-8 w-8 text-prisere-maroon" />
                 </div>
-              )}
-            </div>
+
+                <h2
+                  className="text-xl font-bold text-prisere-dark-gray mb-2"
+                  style={{ fontFamily: "var(--font-heading)" }}
+                >
+                  Your business locations
+                </h2>
+                <p
+                  className="text-gray-600 mb-6 text-sm"
+                  style={{ fontFamily: "var(--font-body)" }}
+                >
+                  Add all locations in this state for accurate risk assessment.
+                </p>
+
+                <div className="w-full space-y-3">
+                  {/* Primary address (read-only) */}
+                  <div className="flex items-center gap-3 px-4 py-3 bg-gray-50 border border-gray-200 rounded-md">
+                    <MapPin className="h-4 w-4 text-prisere-maroon flex-shrink-0" />
+                    <span className="flex-1 text-sm text-prisere-dark-gray text-left">
+                      {currentAnswer as string}
+                    </span>
+                    <span className="text-xs text-gray-500 font-medium whitespace-nowrap">
+                      (primary)
+                    </span>
+                  </div>
+
+                  {/* Additional locations */}
+                  {additionalLocations.map((loc, i) => (
+                    <div key={i} className="flex items-start gap-2">
+                      <div className="flex-1">
+                        <LocationInput
+                          value={loc}
+                          onChange={(v) => {
+                            setAdditionalLocations((prev) => {
+                              const next = [...prev];
+                              next[i] = v;
+                              return next;
+                            });
+                          }}
+                          placeholder="e.g., Brooklyn, NY"
+                          autoDetect={false}
+                          autoFocus={i === additionalLocations.length - 1}
+                        />
+                      </div>
+                      <button
+                        onClick={() =>
+                          setAdditionalLocations((prev) =>
+                            prev.filter((_, j) => j !== i)
+                          )
+                        }
+                        className="mt-3 p-1 text-gray-400 hover:text-red-500 transition-colors"
+                        type="button"
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+
+                <button
+                  onClick={() =>
+                    setAdditionalLocations((prev) => [...prev, ""])
+                  }
+                  className="flex items-center gap-1.5 mt-4 text-sm text-prisere-maroon hover:text-prisere-maroon/80 font-medium transition-colors"
+                  type="button"
+                >
+                  <Plus className="h-4 w-4" />
+                  Add another location
+                </button>
+              </div>
+            ) : (
+              <div className="flex flex-col items-center text-center">
+                <div className="rounded-full bg-prisere-maroon/10 p-4 w-16 h-16 mb-6 flex items-center justify-center">
+                  <Icon className="h-8 w-8 text-prisere-maroon" />
+                </div>
+
+                <h2
+                  className="text-xl font-bold text-prisere-dark-gray mb-2"
+                  style={{ fontFamily: "var(--font-heading)" }}
+                >
+                  {question.title}
+                </h2>
+                <p
+                  className="text-gray-600 mb-8 text-sm"
+                  style={{ fontFamily: "var(--font-body)" }}
+                >
+                  {question.subtitle}
+                </p>
+
+                {question.type === "text" ? (
+                  question.id === "location" ? (
+                    <>
+                      <LocationInput
+                        value={(currentAnswer as string) || ""}
+                        onChange={(v) => setAnswer(v)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" && canProceed) handleNext();
+                        }}
+                        placeholder={question.placeholder}
+                      />
+
+                      {typeof currentAnswer === "string" &&
+                        currentAnswer.trim().length > 0 && (
+                          <div className="w-full mt-8">
+                            <p
+                              className="text-sm font-medium text-prisere-dark-gray mb-3"
+                              style={{ fontFamily: "var(--font-heading)" }}
+                            >
+                              Do you have additional locations in this state?
+                            </p>
+                            <div className="flex gap-4 w-full">
+                              <Button
+                                variant={
+                                  hasMultipleLocations === false
+                                    ? "default"
+                                    : "outline"
+                                }
+                                className={`flex-1 h-12 text-sm ${
+                                  hasMultipleLocations === false
+                                    ? "bg-prisere-maroon hover:bg-prisere-maroon/90 text-white"
+                                    : ""
+                                }`}
+                                onClick={() => {
+                                  setHasMultipleLocations(false);
+                                  setShowLocationSubView(false);
+                                  setAdditionalLocations([]);
+                                }}
+                              >
+                                No, just this one
+                              </Button>
+                              <Button
+                                variant={
+                                  hasMultipleLocations === true
+                                    ? "default"
+                                    : "outline"
+                                }
+                                className={`flex-1 h-12 text-sm ${
+                                  hasMultipleLocations === true
+                                    ? "bg-prisere-maroon hover:bg-prisere-maroon/90 text-white"
+                                    : ""
+                                }`}
+                                onClick={() => {
+                                  setHasMultipleLocations(true);
+                                  setShowLocationSubView(true);
+                                  if (additionalLocations.length === 0) {
+                                    setAdditionalLocations([""]);
+                                  }
+                                }}
+                              >
+                                Yes, I have other locations
+                              </Button>
+                            </div>
+                          </div>
+                        )}
+                    </>
+                  ) : (
+                    <input
+                      type="text"
+                      value={(currentAnswer as string) || ""}
+                      onChange={(e) => setAnswer(e.target.value)}
+                      placeholder={question.placeholder}
+                      className="w-full px-4 py-3 border border-gray-300 rounded-md focus:border-prisere-maroon focus:ring-1 focus:ring-prisere-maroon focus:outline-none text-center"
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && canProceed) handleNext();
+                      }}
+                      autoFocus
+                    />
+                  )
+                ) : (
+                  <div className="flex gap-4 w-full">
+                    <Button
+                      variant={currentAnswer === true ? "default" : "outline"}
+                      className={`flex-1 h-12 text-sm ${
+                        currentAnswer === true
+                          ? "bg-prisere-maroon hover:bg-prisere-maroon/90 text-white"
+                          : ""
+                      }`}
+                      onClick={() => setAnswer(true)}
+                    >
+                      {question.trueLabel ?? "Yes"}
+                    </Button>
+                    <Button
+                      variant={currentAnswer === false ? "default" : "outline"}
+                      className={`flex-1 h-12 text-sm ${
+                        currentAnswer === false
+                          ? "bg-prisere-maroon hover:bg-prisere-maroon/90 text-white"
+                          : ""
+                      }`}
+                      onClick={() => setAnswer(false)}
+                    >
+                      {question.falseLabel ?? "No"}
+                    </Button>
+                  </div>
+                )}
+              </div>
+            )}
           </CardContent>
         </Card>
 
@@ -254,8 +422,10 @@ export default function OnboardingPage() {
           <Button
             variant="outline"
             onClick={handleBack}
-            disabled={currentStep === 0}
-            className={currentStep === 0 ? "invisible" : ""}
+            disabled={currentStep === 0 && !showLocationSubView}
+            className={
+              currentStep === 0 && !showLocationSubView ? "invisible" : ""
+            }
           >
             <ArrowLeft className="h-4 w-4 mr-2" />
             Back

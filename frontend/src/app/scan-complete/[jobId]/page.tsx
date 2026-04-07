@@ -183,7 +183,7 @@ function ScanCompleteContent({
             <ArrowRight className="ml-2 h-4 w-4" />
           </Button>
           <Button variant="outline" className="w-full h-11" asChild>
-            <Link href={`/gap-results/${resolvedParams.jobId}`}>
+            <Link href="/dashboard">
               View full results
             </Link>
           </Button>

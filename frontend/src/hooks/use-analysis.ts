@@ -118,15 +118,17 @@ export function useCreateGapAnalysis() {
     mutationFn: async ({
       policyFile,
       riskProfile,
+      businessLocations,
     }: {
       policyFile: File;
       riskProfile: Record<string, unknown>;
+      businessLocations?: Array<{ address: string; isPrimary: boolean }>;
     }) => {
       const token = await getToken();
 
       const s3Key = await analysisApi.uploadSingleFile(policyFile, token);
 
-      return analysisApi.createGapAnalysis(s3Key, riskProfile, token);
+      return analysisApi.createGapAnalysis(s3Key, riskProfile, token, businessLocations);
     },
     onSuccess: (data: AnalysisJob) => {
       queryClient.setQueryData(

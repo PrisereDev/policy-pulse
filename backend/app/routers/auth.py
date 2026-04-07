@@ -9,7 +9,12 @@ import logging
 from app.database import get_db
 from app.models.user import User
 from app.models.analysis_job import AnalysisJob, JobStatus
-from app.schemas.user import UserResponse, UserUpdate, UserProfile
+from app.schemas.user import (
+    UserResponse,
+    UserUpdate,
+    UserProfile,
+    UserRiskProfileUpdate,
+)
 from app.utils.clerk_auth import get_current_user
 
 logger = logging.getLogger(__name__)
@@ -108,6 +113,40 @@ async def update_current_user(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to update profile"
+        )
+
+
+@router.patch("/me/risk-profile", response_model=UserResponse)
+async def update_user_risk_profile(
+    payload: UserRiskProfileUpdate,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Persist onboarding / risk profile to Postgres (Clerk metadata is updated by the client).
+    """
+    try:
+        user.onboarding_answers = payload.onboarding_answers
+        user.business_locations = [
+            loc.model_dump() for loc in payload.business_locations
+        ]
+        db.commit()
+        db.refresh(user)
+        logger.info("Updated risk profile in DB for user %s", user.id)
+        return UserResponse(
+            id=user.id,
+            email=user.email,
+            name=user.name,
+            company_name=user.company_name,
+            created_at=user.created_at,
+            updated_at=user.updated_at,
+        )
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Failed to persist risk profile: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to save risk profile",
         )
 
 
