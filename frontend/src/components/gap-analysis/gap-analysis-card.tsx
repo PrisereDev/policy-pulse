@@ -52,11 +52,6 @@ export function GapAnalysisCard({
   const why = GAP_WHY[gap.type] || gap.explanation;
   const isUpdate = mode === "update";
 
-  const subtitle =
-    isUpdate && gap.explanation?.trim()
-      ? gap.explanation.trim()
-      : undefined;
-
   let badgeClass: string;
   let badgeLabel: string;
 
@@ -102,11 +97,6 @@ export function GapAnalysisCard({
               ))}
             <div className="min-w-0">
               <h3 className="font-semibold text-prisere-dark-gray">{title}</h3>
-              {isUpdate && subtitle && (
-                <p className="text-sm text-gray-600 mt-1 line-clamp-3">
-                  {subtitle}
-                </p>
-              )}
             </div>
           </div>
           <div className="flex items-center gap-3 shrink-0">
@@ -120,10 +110,23 @@ export function GapAnalysisCard({
         </div>
         {expanded && (
           <div className="mt-4 pt-4 border-t">
-            {!isUpdate && (
+            {isUpdate ? (
+              (gap.explanation?.trim() || why) && (
+                <p className="text-sm text-gray-700 leading-relaxed">
+                  {gap.explanation?.trim() || why}
+                </p>
+              )
+            ) : (
               <p className="text-sm text-gray-700 leading-relaxed">{why}</p>
             )}
-            <LocationTagList locations={gap.affected_locations} />
+            <LocationTagList
+              locations={gap.affected_locations}
+              className={
+                (isUpdate && (gap.explanation?.trim() || why)) || !isUpdate
+                  ? "mt-4 flex flex-wrap gap-2"
+                  : "mt-3 flex flex-wrap gap-2"
+              }
+            />
           </div>
         )}
       </CardContent>
