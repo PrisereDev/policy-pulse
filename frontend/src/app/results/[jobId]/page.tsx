@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useEffect, useMemo } from "react";
+import { use, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useUser, UserButton } from "@clerk/nextjs";
 import { Logo } from "@/components/brand/logo";
@@ -13,11 +13,16 @@ import {
   countGapsNewlyCovered,
   inferGapUpdateStatus,
 } from "@/components/gap-analysis/gap-update-inference";
+import { RenewalAnalysisPdfReport } from "@/components/renewal-analysis/renewal-analysis-pdf-report";
 import {
   useAnalysisHistory,
   useAnalysisResult,
   useGapAnalysisResult,
 } from "@/hooks/use-analysis";
+import {
+  buildRenewalAnalysisFilename,
+  generateRenewalAnalysisPdf,
+} from "@/lib/renewal-analysis-pdf";
 import { QueryErrorBoundary } from "@/components/query-error-boundary";
 import type { AnalysisJob, CoverageGap } from "@/types/api";
 
@@ -98,6 +103,23 @@ function ResultsContent({ params }: { params: Promise<{ jobId: string }> }) {
     return countGapsNewlyCovered(gapResult.gaps, result.changes);
   }, [gapResult, result]);
 
+  const pdfReportRef = useRef<HTMLDivElement>(null);
+  const [pdfLoading, setPdfLoading] = useState(false);
+
+  const handleDownloadPdf = useCallback(async () => {
+    const el = pdfReportRef.current;
+    if (!el) return;
+    setPdfLoading(true);
+    try {
+      const filename = buildRenewalAnalysisFilename(businessName);
+      await generateRenewalAnalysisPdf(el, filename);
+    } catch (e) {
+      console.error("PDF generation failed:", e);
+    } finally {
+      setPdfLoading(false);
+    }
+  }, [businessName]);
+
   useEffect(() => {
     window.scrollTo(0, 0);
   }, []);
@@ -120,7 +142,21 @@ function ResultsContent({ params }: { params: Promise<{ jobId: string }> }) {
   const email = user?.primaryEmailAddress?.emailAddress;
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50 relative">
+      {/* Off-screen PDF source: full expanded report for html2pdf only */}
+      <div
+        className="fixed left-[-14000px] top-0 z-[-10] pointer-events-none"
+        aria-hidden
+      >
+        <RenewalAnalysisPdfReport
+          ref={pdfReportRef}
+          businessName={businessName}
+          comparedLabel={comparedLabel}
+          result={result}
+          sortedGapItems={sortedGapItems}
+          gapsNowCoveredCount={gapsNowCoveredCount}
+        />
+      </div>
       <header className="bg-white border-b">
         <div className="px-6 py-4">
           <div className="flex items-center justify-between max-w-5xl mx-auto">
@@ -235,8 +271,14 @@ function ResultsContent({ params }: { params: Promise<{ jobId: string }> }) {
           >
             <Link href="/dashboard">Go to dashboard</Link>
           </Button>
-          <Button variant="outline" type="button" className="border-gray-300">
-            Download report
+          <Button
+            variant="outline"
+            type="button"
+            className="border-gray-300"
+            disabled={pdfLoading}
+            onClick={() => void handleDownloadPdf()}
+          >
+            {pdfLoading ? "Generating PDF…" : "Download report"}
           </Button>
         </div>
       </main>

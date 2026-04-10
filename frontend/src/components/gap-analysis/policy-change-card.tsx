@@ -7,65 +7,19 @@ import { AlertTriangle, CheckCircle, ChevronDown, Minus } from "lucide-react";
 import type { PolicyChange } from "@/types/analysis";
 import { cn } from "@/lib/utils";
 import { LocationTagList } from "./location-tags";
-
-function formatChangeBadgeLabel(change: PolicyChange): string {
-  switch (change.change_type) {
-    case "increased":
-      return "Increased";
-    case "decreased":
-      return "Decreased";
-    case "added":
-      return "Added";
-    case "removed":
-      return "Removed";
-    default:
-      return "Modified";
-  }
-}
-
-function policyChangeBadgeClass(change: PolicyChange): string {
-  const t = change.change_type;
-  if (t === "added") {
-    return "bg-prisere-teal/10 text-prisere-teal border-prisere-teal/30 hover:bg-prisere-teal/10 font-normal";
-  }
-  if (t === "modified") {
-    return "bg-gray-100 text-gray-700 border-gray-200 hover:bg-gray-100 font-normal";
-  }
-  return "bg-rose-100/90 text-prisere-maroon border-rose-200/80 hover:bg-rose-100/90 font-normal";
-}
-
-function renewalValueClass(change: PolicyChange): string {
-  if (change.change_type === "added") return "text-prisere-teal font-semibold";
-  if (change.change_type === "modified") return "text-prisere-dark-gray font-semibold";
-  return "text-prisere-maroon font-semibold";
-}
-
-/** Align with gap cards: added / limit up / ded down / premium down = good; inverse = bad */
-function getChangeTone(change: PolicyChange): "bad" | "good" | "neutral" {
-  const { category, change_type } = change;
-  if (change_type === "added") return "good";
-  if (change_type === "removed") return "bad";
-  if (category === "coverage_limit" && change_type === "decreased") return "bad";
-  if (category === "coverage_limit" && change_type === "increased") return "good";
-  if (category === "deductible" && change_type === "increased") return "bad";
-  if (category === "deductible" && change_type === "decreased") return "good";
-  if (category === "premium" && change_type === "increased") return "bad";
-  if (category === "premium" && change_type === "decreased") return "good";
-  if (category === "exclusion" && change_type === "added") return "bad";
-  if (category === "exclusion" && change_type === "removed") return "good";
-  return "neutral";
-}
+import {
+  computeRenewalDisplay,
+  formatChangeBadgeLabel,
+  getChangeTone,
+  policyChangeBadgeClassInteractive,
+  renewalValueClass,
+} from "./policy-change-formatting";
 
 export function RenewalPolicyChangeCard({ change }: { change: PolicyChange }) {
   const [expanded, setExpanded] = useState(false);
   const tone = getChangeTone(change);
 
-  const renewalDisplay =
-    change.change_amount?.trim() &&
-    change.renewal_value &&
-    !change.renewal_value.includes(change.change_amount)
-      ? `${change.renewal_value} (${change.change_amount})`
-      : change.renewal_value;
+  const renewalDisplay = computeRenewalDisplay(change);
 
   const LeadingIcon =
     tone === "good" ? (
@@ -106,7 +60,7 @@ export function RenewalPolicyChangeCard({ change }: { change: PolicyChange }) {
             </div>
           </div>
           <div className="flex items-center gap-2 shrink-0">
-            <Badge className={policyChangeBadgeClass(change)}>
+            <Badge className={policyChangeBadgeClassInteractive(change)}>
               {formatChangeBadgeLabel(change)}
             </Badge>
             <ChevronDown
