@@ -23,6 +23,8 @@ export interface PolicyChange {
     baseline: number[];
     renewal: number[];
   };
+  /** When present (from AI), lists addresses affected by this change */
+  affected_locations?: string[];
 }
 
 export interface SuggestedAction {

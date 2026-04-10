@@ -31,6 +31,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { QueryErrorBoundary } from "@/components/query-error-boundary";
 import { FileUploadCard } from "@/components/upload/file-upload-card";
+import { GapAnalysisCard } from "@/components/gap-analysis/gap-analysis-card";
 import {
   useAnalysisHistory,
   useGapAnalysisResult,
@@ -41,8 +42,6 @@ import type { AnalysisJob, CoverageGap } from "@/types/api";
 import {
   AlertTriangle,
   CheckCircle,
-  ChevronDown,
-  MapPin,
   Plus,
   FileText,
   Clock,
@@ -56,102 +55,6 @@ import { formatDistanceToNow } from "date-fns";
 /** Single-policy gap analyses have no renewal file; renewals always have a renewal filename. */
 function isGapAnalysisJob(a: AnalysisJob): boolean {
   return !a.renewal_filename || String(a.renewal_filename).trim() === "";
-}
-
-// ---------------------------------------------------------------------------
-// GapCard — identical to the former gap-results page version
-// ---------------------------------------------------------------------------
-
-const GAP_TITLES: Record<string, string> = {
-  flood: "Flood Insurance",
-  spoilage: "Electrical Interruption (Spoilage)",
-  event_cancellation: "Event Cancellation",
-  eo: "Errors & Omissions (E&O)",
-  cyber: "Cyber Insurance",
-};
-
-const GAP_WHY: Record<string, string> = {
-  flood:
-    "Your address is in a zone where standard policies typically exclude water damage. Since flood damage can be a total loss, this fills a critical gap most owners miss.",
-  spoilage:
-    "You have perishables. A simple 24-hour outage could wipe out your entire stock. This add-on covers the replacement cost so one storm doesn't kill your annual margins.",
-  event_cancellation:
-    "Your revenue is tied to local anchor events. If an event is pulled (like COVID lockdowns or local cancellations), this protects the income you've already banked on.",
-  eo:
-    "Since you provide expert services, a mistake or missed deadline could lead to a lawsuit. This covers legal fees and settlements that often exceed the value of the contract.",
-  cyber:
-    "Storing data or processing digital payments makes you a target. This covers the high cost of data recovery and legal compliance if your systems are breached.",
-};
-
-function GapCard({
-  gap,
-  defaultExpanded = false,
-}: {
-  gap: CoverageGap;
-  defaultExpanded?: boolean;
-}) {
-  const [expanded, setExpanded] = useState(defaultExpanded);
-  const isCovered = gap.status === "covered";
-  const title = GAP_TITLES[gap.type] || gap.title;
-  const why = GAP_WHY[gap.type] || gap.explanation;
-
-  return (
-    <Card
-      className={`border-l-4 ${
-        isCovered ? "border-l-prisere-teal" : "border-l-prisere-maroon"
-      }`}
-    >
-      <CardContent className="p-5">
-        <div
-          className="flex items-center justify-between cursor-pointer"
-          onClick={() => setExpanded(!expanded)}
-        >
-          <div className="flex items-center gap-3">
-            {isCovered ? (
-              <CheckCircle className="h-5 w-5 text-prisere-teal flex-shrink-0" />
-            ) : (
-              <AlertTriangle className="h-5 w-5 text-prisere-maroon flex-shrink-0" />
-            )}
-            <h3 className="font-semibold text-prisere-dark-gray">{title}</h3>
-          </div>
-          <div className="flex items-center gap-3">
-            <Badge
-              className={
-                isCovered
-                  ? "bg-prisere-teal/10 text-prisere-teal border-prisere-teal/30 hover:bg-prisere-teal/10"
-                  : "bg-rose-100/90 text-prisere-maroon border-rose-200/80 hover:bg-rose-100/90 font-normal"
-              }
-            >
-              {isCovered ? "Covered" : "Not covered"}
-            </Badge>
-            <ChevronDown
-              className={`h-4 w-4 text-gray-400 transition-transform ${
-                expanded ? "rotate-180" : ""
-              }`}
-            />
-          </div>
-        </div>
-        {expanded && (
-          <div className="mt-4 pt-4 border-t">
-            <p className="text-sm text-gray-700 leading-relaxed">{why}</p>
-            {gap.affected_locations && gap.affected_locations.length > 0 && (
-              <div className="mt-3 flex flex-wrap gap-2">
-                {gap.affected_locations.map((loc) => (
-                  <span
-                    key={loc}
-                    className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full bg-gray-100 text-gray-600"
-                  >
-                    <MapPin className="h-3 w-3" />
-                    {loc}
-                  </span>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-      </CardContent>
-    </Card>
-  );
 }
 
 // ---------------------------------------------------------------------------
@@ -963,8 +866,14 @@ function DashboardContent() {
     });
   }, [gapResult]);
 
-  const pastAnalyses = analyses.filter(
-    (a: AnalysisJob) => a.job_id !== latestGapJob?.job_id
+  /** All jobs (gap + renewal), newest first — include latest gap so coverage runs always appear in the list */
+  const pastAnalyses = useMemo(
+    () =>
+      [...analyses].sort(
+        (a, b) =>
+          new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+      ),
+    [analyses]
   );
 
   const onboardingAnswersMeta = user?.unsafeMetadata?.onboardingAnswers as
@@ -1113,7 +1022,7 @@ function DashboardContent() {
                       </p>
                     ) : (
                       sortedDashboardGaps.map((g, idx) => (
-                        <GapCard
+                        <GapAnalysisCard
                           key={`${g.type}-${g.title}-${idx}`}
                           gap={g}
                           defaultExpanded={false}
