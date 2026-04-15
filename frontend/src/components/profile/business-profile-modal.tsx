@@ -15,6 +15,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { analysisApi } from "@/lib/api";
+import { getBackendAuthToken } from "@/lib/clerk-backend-token";
+import { useAuthApiFailureHandler } from "@/hooks/use-auth-api-failure";
+import { isUnauthorizedApiError } from "@/lib/auth-api-errors";
 
 export type BusinessLocation = { address: string; isPrimary: boolean };
 
@@ -57,6 +60,7 @@ export function BusinessProfileModal({
 }) {
   const { user } = useUser();
   const { getToken } = useAuth();
+  const onAuthFailure = useAuthApiFailureHandler();
   const [primaryAddress, setPrimaryAddress] = useState("");
   const [additionalAddresses, setAdditionalAddresses] = useState<string[]>([]);
   const [climate, setClimate] = useState(false);
@@ -132,7 +136,7 @@ export function BusinessProfileModal({
     setSaving(true);
     setError(null);
     try {
-      const token = await getToken();
+      const token = await getBackendAuthToken(getToken);
       await analysisApi.updateUserRiskProfile(
         {
           onboarding_answers: onboardingAnswers,
@@ -153,6 +157,8 @@ export function BusinessProfileModal({
       onOpenChange(false);
       onSaved();
     } catch (e) {
+      await onAuthFailure(e);
+      if (isUnauthorizedApiError(e)) return;
       console.error(e);
       setError(
         e instanceof Error ? e.message : "Could not save your profile. Try again."
