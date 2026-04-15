@@ -76,7 +76,9 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
-    // TODO: Implement account deletion when we have database
+    // Stub only: real account deletion is performed in Clerk (User profile / delete account).
+    // The FastAPI backend exposes DELETE /v1/auth/me for the Postgres user row; the app does not
+    // call this Next route for production deletion today.
     return NextResponse.json({
       message: 'Account deletion initiated',
       user_id: userId

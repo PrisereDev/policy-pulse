@@ -3,7 +3,7 @@
 import { useAuth, useUser } from "@clerk/nextjs";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { Logo } from "@/components/brand/logo";
+import { AppLogoWithBusiness } from "@/components/brand/app-logo-with-business";
 import { PageHeader } from "@/components/brand/page-header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -120,7 +120,7 @@ function HistoryContent() {
       {/* Header */}
       <header className="border-b bg-white px-6 py-4">
         <div className="flex items-center justify-between max-w-7xl mx-auto">
-          <Logo />
+          <AppLogoWithBusiness />
           <div className="flex items-center gap-4">
             <span className="text-sm text-gray-600">
               {user?.emailAddresses[0]?.emailAddress}
@@ -283,16 +283,16 @@ function HistoryContent() {
 }
 
 export default function HistoryPage() {
-  const { isLoaded, userId } = useAuth();
+  const { isLoaded, isSignedIn } = useAuth();
   const router = useRouter();
 
   useEffect(() => {
-    if (isLoaded && !userId) {
-      router.push("/sign-in");
+    if (isLoaded && isSignedIn === false) {
+      router.replace("/sign-in");
     }
-  }, [isLoaded, userId, router]);
+  }, [isLoaded, isSignedIn, router]);
 
-  if (!isLoaded || !userId) {
+  if (!isLoaded || isSignedIn !== true) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-prisere-maroon"></div>

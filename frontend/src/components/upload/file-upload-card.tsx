@@ -108,15 +108,18 @@ export function FileUploadCard({
             </p>
           </div>
         ) : (
-          <div className="bg-gray-50 rounded-lg p-4">
-            <div className="flex items-start justify-between">
-              <div className="flex items-start space-x-3">
-                <FileText className="h-8 w-8 text-prisere-maroon flex-shrink-0 mt-1" />
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium text-gray-900 truncate">
+          <div className="bg-gray-50 rounded-lg p-4 min-w-0">
+            <div className="flex items-start justify-between gap-2 min-w-0">
+              <div className="flex min-w-0 flex-1 items-start gap-3">
+                <FileText className="mt-1 h-8 w-8 flex-shrink-0 text-prisere-maroon" />
+                <div className="min-w-0 flex-1 overflow-hidden">
+                  <p
+                    className="truncate text-sm font-medium text-gray-900"
+                    title={file.name}
+                  >
                     {file.name}
                   </p>
-                  <p className="text-xs text-gray-500 mt-1">
+                  <p className="mt-1 text-xs text-gray-500">
                     {formatFileSize(file.size)}
                   </p>
                 </div>
@@ -126,7 +129,7 @@ export function FileUploadCard({
                 variant="ghost"
                 size="sm"
                 onClick={onFileRemove}
-                className="text-gray-400 hover:text-gray-600 -mt-1 -mr-2"
+                className="-mt-1 -mr-2 flex-shrink-0 text-gray-400 hover:text-gray-600"
               >
                 <X className="h-4 w-4" />
               </Button>

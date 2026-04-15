@@ -17,7 +17,10 @@ import {
   X,
   Plus,
 } from "lucide-react";
-import { LocationInput } from "@/components/onboarding/location-input";
+import {
+  AddressAutocomplete,
+  type ParsedAddress,
+} from "@/components/onboarding/address-autocomplete";
 
 interface Question {
   id: string;
@@ -82,7 +85,7 @@ const QUESTIONS: Question[] = [
 ];
 
 export default function OnboardingPage() {
-  const { isLoaded, userId } = useAuth();
+  const { isLoaded, isSignedIn } = useAuth();
   const { user } = useUser();
   const router = useRouter();
   const [currentStep, setCurrentStep] = useState(0);
@@ -94,6 +97,13 @@ export default function OnboardingPage() {
   const [additionalLocations, setAdditionalLocations] = useState<string[]>([]);
   const [showLocationSubView, setShowLocationSubView] = useState(false);
 
+  const [addressSearch, setAddressSearch] = useState("");
+  /** Set when user picks a Geoapify result (optional metadata for onboarding payload). */
+  const [primaryGeo, setPrimaryGeo] = useState<{
+    lat: string;
+    lng: string;
+  } | null>(null);
+
   const alreadyCompleted =
     isLoaded && !!user?.unsafeMetadata?.hasCompletedOnboarding;
 
@@ -103,7 +113,17 @@ export default function OnboardingPage() {
     }
   }, [alreadyCompleted, router]);
 
-  if (!isLoaded || !userId || alreadyCompleted) {
+  useEffect(() => {
+    const q = QUESTIONS[currentStep];
+    if (q?.id !== "location" || showLocationSubView) return;
+    const loc = addressSearch.trim();
+    setAnswers((prev) => {
+      if (prev.location === loc) return prev;
+      return { ...prev, location: loc };
+    });
+  }, [addressSearch, currentStep, showLocationSubView]);
+
+  if (!isLoaded || isSignedIn !== true || alreadyCompleted) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-prisere-maroon"></div>
@@ -115,10 +135,16 @@ export default function OnboardingPage() {
   const isLastStep = currentStep === QUESTIONS.length - 1;
   const currentAnswer = answers[question.id];
 
+  const primaryLocationText =
+    question.id === "location" && !showLocationSubView
+      ? addressSearch.trim()
+      : typeof currentAnswer === "string"
+        ? currentAnswer
+        : "";
+
   const canProceed =
     question.id === "location"
-      ? typeof currentAnswer === "string" &&
-        currentAnswer.trim().length > 0 &&
+      ? primaryLocationText.trim().length > 0 &&
         (hasMultipleLocations === false || showLocationSubView)
       : question.type === "text"
         ? typeof currentAnswer === "string" && currentAnswer.trim().length > 0
@@ -128,14 +154,26 @@ export default function OnboardingPage() {
     if (isLastStep) {
       setIsSubmitting(true);
       try {
+        const locationStr = addressSearch.trim();
+
         const businessLocations = [
-          { address: answers.location as string, isPrimary: true },
+          { address: locationStr, isPrimary: true },
           ...additionalLocations
             .filter((loc) => loc.trim().length > 0)
             .map((loc) => ({ address: loc, isPrimary: false })),
         ];
 
-        sessionStorage.setItem("onboardingAnswers", JSON.stringify(answers));
+        const answersPayload = {
+          ...answers,
+          location: locationStr,
+          ...(primaryGeo
+            ? { addressLat: primaryGeo.lat, addressLng: primaryGeo.lng }
+            : {}),
+        };
+        sessionStorage.setItem(
+          "onboardingAnswers",
+          JSON.stringify(answersPayload)
+        );
         sessionStorage.setItem(
           "businessLocations",
           JSON.stringify(businessLocations)
@@ -143,7 +181,7 @@ export default function OnboardingPage() {
         await user?.update({
           unsafeMetadata: {
             ...user.unsafeMetadata,
-            onboardingAnswers: answers,
+            onboardingAnswers: answersPayload,
             businessLocations,
           },
         });
@@ -169,6 +207,14 @@ export default function OnboardingPage() {
 
   const setAnswer = (value: string | boolean) => {
     setAnswers((prev) => ({ ...prev, [question.id]: value }));
+  };
+
+  const handlePrimaryAddressSelect = (parsed: ParsedAddress) => {
+    setPrimaryGeo(
+      parsed.lat != null && parsed.lng != null
+        ? { lat: String(parsed.lat), lng: String(parsed.lng) }
+        : null
+    );
   };
 
   const Icon = question.icon;
@@ -211,8 +257,8 @@ export default function OnboardingPage() {
         </div>
 
         {/* Question card */}
-        <Card className="w-full shadow-md">
-          <CardContent className="p-8">
+        <Card className="w-full shadow-md overflow-visible">
+          <CardContent className="p-8 overflow-visible">
             {question.id === "location" && showLocationSubView ? (
               <div className="flex flex-col items-center text-center w-full">
                 <div className="rounded-full bg-prisere-maroon/10 p-4 w-16 h-16 mb-6 flex items-center justify-center">
@@ -247,8 +293,9 @@ export default function OnboardingPage() {
                   {/* Additional locations */}
                   {additionalLocations.map((loc, i) => (
                     <div key={i} className="flex items-start gap-2">
-                      <div className="flex-1">
-                        <LocationInput
+                      <div className="flex-1 text-left">
+                        <AddressAutocomplete
+                          id={`additional-address-${i}`}
                           value={loc}
                           onChange={(v) => {
                             setAdditionalLocations((prev) => {
@@ -257,8 +304,8 @@ export default function OnboardingPage() {
                               return next;
                             });
                           }}
-                          placeholder="e.g., Brooklyn, NY"
-                          autoDetect={false}
+                          onSelect={() => {}}
+                          placeholder="Search a US address…"
                           autoFocus={i === additionalLocations.length - 1}
                         />
                       </div>
@@ -310,17 +357,35 @@ export default function OnboardingPage() {
                 {question.type === "text" ? (
                   question.id === "location" ? (
                     <>
-                      <LocationInput
-                        value={(currentAnswer as string) || ""}
-                        onChange={(v) => setAnswer(v)}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter" && canProceed) handleNext();
-                        }}
-                        placeholder={question.placeholder}
-                      />
+                      <div className="w-full space-y-4 text-left relative z-10 overflow-visible">
+                        <div>
+                          <label
+                            htmlFor="address-search"
+                            className="text-sm font-medium text-prisere-dark-gray mb-1.5 block"
+                            style={{ fontFamily: "var(--font-heading)" }}
+                          >
+                            Search address
+                          </label>
+                          <AddressAutocomplete
+                            id="address-search"
+                            value={addressSearch}
+                            onChange={(v) => {
+                              setAddressSearch(v);
+                              if (!v.trim()) setPrimaryGeo(null);
+                            }}
+                            onSelect={handlePrimaryAddressSelect}
+                            placeholder="Start typing a US address…"
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter" && canProceed) {
+                                e.preventDefault();
+                                handleNext();
+                              }
+                            }}
+                          />
+                        </div>
+                      </div>
 
-                      {typeof currentAnswer === "string" &&
-                        currentAnswer.trim().length > 0 && (
+                      {primaryLocationText.trim().length > 0 && (
                           <div className="w-full mt-8">
                             <p
                               className="text-sm font-medium text-prisere-dark-gray mb-3"

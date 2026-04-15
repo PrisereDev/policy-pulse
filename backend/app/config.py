@@ -1,5 +1,7 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from typing import List
+from typing import Any, List
+
+from pydantic import field_validator
 
 
 class Settings(BaseSettings):
@@ -25,6 +27,14 @@ class Settings(BaseSettings):
     clerk_publishable_key: str
     # Webhook signing secret from Clerk Dashboard (whsec_...); required for POST /v1/webhooks/clerk
     clerk_webhook_signing_secret: str = ""
+
+    @field_validator("clerk_webhook_signing_secret", mode="before")
+    @classmethod
+    def strip_clerk_webhook_secret(cls, v: Any) -> str:
+        """Avoid trailing newlines from dashboard copy-paste breaking base64 decode in Svix."""
+        if v is None:
+            return ""
+        return str(v).strip()
     
     # Anthropic Claude API
     anthropic_api_key: str

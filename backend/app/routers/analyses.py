@@ -6,7 +6,7 @@ from fastapi.responses import JSONResponse
 
 from pydantic import ValidationError
 from sqlalchemy.orm import Session
-from typing import List
+from typing import List, Optional, Tuple
 import logging
 import asyncio
 
@@ -23,6 +23,7 @@ from app.schemas.analysis import (
     AnalysisListItem,
     GapAnalysisCreateRequest,
     GapAnalysisResultResponse,
+    CoverageGapItem,
 )
 from app.services.s3_service import s3_service
 from app.services.analysis_processor import analysis_processor
@@ -35,6 +36,20 @@ import requests
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/v1/analyses", tags=["analyses"])
+
+
+def _gap_policy_metadata_from_result(
+    result: AnalysisResult,
+) -> Tuple[Optional[str], Optional[str]]:
+    """Read named insured + expiry saved during gap analysis (see analysis_processor)."""
+    for e in result.educational_insights or []:
+        if isinstance(e, dict) and e.get("change_type") == "gap_policy_metadata":
+            raw_bn = e.get("business_name")
+            raw_exp = e.get("policy_expiration_date")
+            bn = raw_bn.strip() if isinstance(raw_bn, str) and raw_bn.strip() else None
+            exp = raw_exp.strip() if isinstance(raw_exp, str) and raw_exp.strip() else None
+            return bn, exp
+    return None, None
 NFHL_URL = "https://hazards.fema.gov/arcgis/rest/services/public/NFHL/MapServer/28/query"
 GEOCODER = "https://geocode.arcgis.com/arcgis/rest/services/World/GeocodeServer/findAddressCandidates"
 
@@ -580,15 +595,32 @@ async def get_gap_analysis_result(
                 detail="Gap analysis result not found",
             )
 
-        gaps = result.changes or []
+        raw_gaps = result.changes or []
+        gaps: list[CoverageGapItem] = []
+        for g in raw_gaps:
+            if not isinstance(g, dict):
+                continue
+            gaps.append(
+                CoverageGapItem(
+                    type=str(g.get("type") or "unknown"),
+                    status=str(g.get("status") or "not_covered"),
+                    title=str(g.get("title") or ""),
+                    explanation=str(g.get("explanation") or ""),
+                    affected_locations=g.get("affected_locations")
+                    if isinstance(g.get("affected_locations"), list)
+                    else None,
+                )
+            )
         recommendations = [a.get("action", "") for a in (result.suggested_actions or [])]
+
+        business_name, policy_expiration_date = _gap_policy_metadata_from_result(result)
 
         return GapAnalysisResultResponse(
             job_id=result.job_id,
             status="completed",
             gaps=gaps,
-            business_name=None,
-            policy_expiration_date=None,
+            business_name=business_name,
+            policy_expiration_date=policy_expiration_date,
             summary=f"Found {len(gaps)} coverage gap(s) with {len(recommendations)} endorsement recommendation(s).",
             recommendations=recommendations,
             metadata={

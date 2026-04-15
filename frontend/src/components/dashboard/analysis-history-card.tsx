@@ -20,6 +20,11 @@ interface AnalysisHistoryCardProps {
 }
 
 const statusConfig = {
+  pending: {
+    icon: Clock,
+    color: "bg-slate-100 text-slate-800",
+    label: "Queued",
+  },
   processing: {
     icon: Clock,
     color: "bg-yellow-100 text-yellow-800",
@@ -75,7 +80,7 @@ export function AnalysisHistoryCard({ analysis, onDelete }: AnalysisHistoryCardP
                   </Link>
                 </DropdownMenuItem>
               )}
-              {analysis.status === "processing" && (
+              {(analysis.status === "processing" || analysis.status === "pending") && (
                 <DropdownMenuItem asChild>
                   <Link href={`/analysis/${analysis.job_id}`}>
                     <Clock className="h-4 w-4 mr-2" />
@@ -128,7 +133,7 @@ export function AnalysisHistoryCard({ analysis, onDelete }: AnalysisHistoryCardP
             </Button>
           )}
           
-          {analysis.status === "processing" && (
+          {(analysis.status === "processing" || analysis.status === "pending") && (
             <Button 
               asChild 
               variant="outline" 

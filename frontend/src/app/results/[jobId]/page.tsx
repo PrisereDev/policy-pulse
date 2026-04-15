@@ -4,6 +4,7 @@ import { use, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useUser, UserButton } from "@clerk/nextjs";
 import { Logo } from "@/components/brand/logo";
+import { resolveBusinessDisplayName } from "@/lib/business-display-name";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { GapAnalysisCard } from "@/components/gap-analysis/gap-analysis-card";
@@ -75,16 +76,11 @@ function ResultsContent({ params }: { params: Promise<{ jobId: string }> }) {
     });
   }, [gapResult]);
 
-  const onboardingAnswersMeta = user?.unsafeMetadata?.onboardingAnswers as
-    | Record<string, unknown>
-    | undefined;
-  const businessName =
-    gapResult?.business_name?.trim() ||
-    (user?.unsafeMetadata?.businessName as string | undefined) ||
-    (typeof onboardingAnswersMeta?.businessName === "string"
-      ? onboardingAnswersMeta.businessName
-      : undefined) ||
-    (user?.firstName ? `${user.firstName}'s business` : "Your business");
+  const businessDisplay = useMemo(
+    () => resolveBusinessDisplayName(gapResult?.business_name, user),
+    [gapResult?.business_name, user]
+  );
+  const businessName = businessDisplay.label;
 
   const comparedLabel = result?.metadata?.completed_at
     ? new Date(result.metadata.completed_at).toLocaleDateString("en-US", {
@@ -160,7 +156,10 @@ function ResultsContent({ params }: { params: Promise<{ jobId: string }> }) {
       <header className="bg-white border-b">
         <div className="px-6 py-4">
           <div className="flex items-center justify-between max-w-5xl mx-auto">
-            <Logo />
+            <Logo
+              businessLabel={businessDisplay.label}
+              businessLabelIsPlaceholder={businessDisplay.isPlaceholder}
+            />
             <div className="flex items-center gap-4">
               {email && (
                 <span className="text-sm text-gray-600 hidden sm:inline max-w-[220px] truncate">

@@ -20,6 +20,7 @@ import {
 import { useOnboardingGuard } from "@/hooks/use-onboarding";
 import { BusinessProfileModal } from "@/components/profile/business-profile-modal";
 import { Logo } from "@/components/brand/logo";
+import { resolveBusinessDisplayName } from "@/lib/business-display-name";
 import { PageHeader } from "@/components/brand/page-header";
 import { Button } from "@/components/ui/button";
 import {
@@ -38,6 +39,7 @@ import {
   useCreateAnalysis,
   useCreateGapAnalysis,
 } from "@/hooks/use-analysis";
+import { useBusinessDisplayName } from "@/hooks/use-business-display-name";
 import type { AnalysisJob, CoverageGap } from "@/types/api";
 import {
   AlertTriangle,
@@ -161,18 +163,20 @@ function SingleFileDropZone({
         : Math.round(file.size / 1048576) + " MB";
 
     return (
-      <div className="bg-gray-50 rounded-lg p-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3 min-w-0">
-            <FileText className="h-6 w-6 text-prisere-maroon flex-shrink-0" />
-            <div className="min-w-0">
-              <p className="text-sm font-medium text-gray-900 truncate">{file.name}</p>
+      <div className="min-w-0 rounded-lg bg-gray-50 p-4">
+        <div className="flex min-w-0 items-center justify-between gap-2">
+          <div className="flex min-w-0 flex-1 items-center gap-3">
+            <FileText className="h-6 w-6 flex-shrink-0 text-prisere-maroon" />
+            <div className="min-w-0 flex-1 overflow-hidden">
+              <p className="truncate text-sm font-medium text-gray-900" title={file.name}>
+                {file.name}
+              </p>
               <p className="text-xs text-gray-500">{sizeStr}</p>
             </div>
           </div>
           <button
             onClick={onFileRemove}
-            className="p-1 text-gray-400 hover:text-gray-600"
+            className="flex-shrink-0 p-1 text-gray-400 hover:text-gray-600"
             type="button"
           >
             <XCircle className="h-4 w-4" />
@@ -213,6 +217,7 @@ function RiskProfileSummary({
   onEditProfile: () => void;
 }) {
   const { user } = useUser();
+  const { label: businessName } = useBusinessDisplayName();
 
   const answers = user?.unsafeMetadata?.onboardingAnswers as
     | Record<string, unknown>
@@ -231,11 +236,6 @@ function RiskProfileSummary({
   if (answers.events === true) riskLabels.push("Event-dependent");
   if (answers.professionalServices === true) riskLabels.push("Professional services");
   if (answers.payments === true) riskLabels.push("Digital payments");
-
-  const businessName =
-    (user?.unsafeMetadata?.businessName as string | undefined) ||
-    (answers.businessName as string | undefined) ||
-    (user?.firstName ? `${user.firstName}'s Business` : null);
 
   // Try to infer a "flood zone" label from location risk metadata if present
   const floodCount = locations.filter((l) => {
@@ -258,7 +258,7 @@ function RiskProfileSummary({
         <Card className="border-gray-200/80 shadow-none bg-white">
           <CardContent className="p-4">
             <p className="font-semibold text-prisere-dark-gray text-sm">
-              {businessName ?? "Your Business"}
+              {businessName}
             </p>
             <p className="text-sm text-gray-500 mt-0.5">{primary.address}</p>
             {otherCount > 0 && (
@@ -680,6 +680,11 @@ const statusConfig: Record<
   string,
   { icon: typeof CheckCircle; color: string; label: string }
 > = {
+  pending: {
+    icon: Clock,
+    color: "bg-slate-100 text-slate-800",
+    label: "Queued",
+  },
   processing: {
     icon: Clock,
     color: "bg-yellow-100 text-yellow-800",
@@ -709,12 +714,14 @@ function AnalysisHistoryRow({ analysis }: { analysis: AnalysisJob }) {
     ? `${analysis.baseline_filename}`
     : `${analysis.baseline_filename} · ${analysis.renewal_filename ?? "renewal"}`;
 
+  const inFlight =
+    analysis.status === "processing" || analysis.status === "pending";
   const href =
     analysis.status === "completed"
       ? gap
         ? `/scan-complete/${analysis.job_id}`
         : `/results/${analysis.job_id}`
-      : analysis.status === "processing"
+      : inFlight
         ? gap
           ? `/analysis/${analysis.job_id}?type=gap`
           : `/analysis/${analysis.job_id}`
@@ -775,6 +782,8 @@ function DashboardContent() {
   } = useAnalysisHistory();
 
   const isNewParam = searchParams.get("new") === "true";
+  /** When landing from /analysis after gap completes, history may not list the job yet — prefer this id. */
+  const jobIdFromUrl = searchParams.get("jobId");
   /** Dev-only: append ?s3=1 to preview the post-onboarding / no-history layout while your account still has analyses. */
   const forceS3LayoutDev =
     process.env.NODE_ENV === "development" &&
@@ -809,17 +818,20 @@ function DashboardContent() {
     )[0];
   }, [analyses]);
 
-  const gapJobId = latestGapJob?.job_id ?? "";
-  const gapQueryEnabled = !!latestGapJob;
+  const gapJobId = jobIdFromUrl ?? latestGapJob?.job_id ?? "";
+  const gapQueryEnabled = !!gapJobId;
 
   const {
     data: gapResult,
     isLoading: gapLoading,
     isError: gapResultError,
-  } = useGapAnalysisResult(gapJobId, gapQueryEnabled);
+  } = useGapAnalysisResult(gapJobId, gapQueryEnabled, true);
+
+  const gapJobForLabels =
+    analyses.find((a) => a.job_id === gapJobId) ?? latestGapJob;
 
   const isFirstVisit = isNewParam || analyses.length <= 1;
-  const isReturningGapRecap = !!(latestGapJob && gapResult);
+  const isReturningGapRecap = !!(gapJobForLabels && gapResult);
 
   const locations = (user?.unsafeMetadata?.businessLocations as
     | Array<{ address: string; isPrimary: boolean }>
@@ -876,19 +888,13 @@ function DashboardContent() {
     [analyses]
   );
 
-  const onboardingAnswersMeta = user?.unsafeMetadata?.onboardingAnswers as
-    | Record<string, unknown>
-    | undefined;
-  const recapBusinessName =
-    gapResult?.business_name?.trim() ||
-    (user?.unsafeMetadata?.businessName as string | undefined) ||
-    (typeof onboardingAnswersMeta?.businessName === "string"
-      ? onboardingAnswersMeta.businessName
-      : undefined) ||
-    (user?.firstName ? `${user.firstName}'s business` : "Your business");
+  const businessDisplay = useMemo(
+    () => resolveBusinessDisplayName(gapResult?.business_name, user),
+    [gapResult?.business_name, user]
+  );
 
-  const lastAnalyzedLabel = latestGapJob
-    ? new Date(latestGapJob.created_at).toLocaleDateString("en-US", {
+  const lastAnalyzedLabel = gapJobForLabels
+    ? new Date(gapJobForLabels.created_at).toLocaleDateString("en-US", {
         month: "short",
         day: "numeric",
         year: "numeric",
@@ -935,7 +941,10 @@ function DashboardContent() {
     <div className="min-h-screen bg-gray-50">
       <header className="border-b bg-white px-6 py-4">
         <div className="flex items-center justify-between max-w-7xl mx-auto">
-          <Logo />
+          <Logo
+            businessLabel={businessDisplay.label}
+            businessLabelIsPlaceholder={businessDisplay.isPlaceholder}
+          />
           <div className="flex items-center gap-4">
             <span className="text-sm text-gray-600">
               {user?.emailAddresses[0]?.emailAddress}
@@ -962,7 +971,7 @@ function DashboardContent() {
               isS3Flow
                 ? "You're almost there. Upload your policy to see where you might be exposed."
                 : isReturningGapRecap && lastAnalyzedLabel
-                  ? `${recapBusinessName} — Last analyzed ${lastAnalyzedLabel}`
+                  ? `${businessDisplay.label} — Last analyzed ${lastAnalyzedLabel}`
                   : isFirstVisit
                     ? "Here's what we found in your policy"
                     : "Your coverage overview at a glance"
@@ -1110,17 +1119,17 @@ function DashboardContent() {
 // ---------------------------------------------------------------------------
 
 function DashboardInner() {
-  const { isLoaded, userId } = useAuth();
+  const { isLoaded, isSignedIn } = useAuth();
   const { isOnboarded, isLoading: onboardingLoading } = useOnboardingGuard();
   const router = useRouter();
 
   useEffect(() => {
-    if (isLoaded && !userId) {
-      router.push("/sign-in");
+    if (isLoaded && isSignedIn === false) {
+      router.replace("/sign-in");
     }
-  }, [isLoaded, userId, router]);
+  }, [isLoaded, isSignedIn, router]);
 
-  if (!isLoaded || !userId || onboardingLoading || !isOnboarded) {
+  if (!isLoaded || isSignedIn !== true || onboardingLoading || !isOnboarded) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-prisere-maroon" />

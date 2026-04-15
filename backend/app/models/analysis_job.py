@@ -99,17 +99,25 @@ class AnalysisJob(Base):
         """
         if self.status in [JobStatus.COMPLETED, JobStatus.FAILED]:
             return self.completed_at.isoformat() if self.completed_at else None
-        
+
         if self.status == JobStatus.PROCESSING and self.started_at:
-            # Estimate based on progress (assume 120 seconds total)
+            # DB may return naive datetimes; mixing naive + aware raises TypeError in Python 3.
             from datetime import timedelta
-            elapsed = (datetime.now(timezone.utc) - self.started_at).total_seconds()
+
+            started = self.started_at
+            if started.tzinfo is None:
+                started = started.replace(tzinfo=timezone.utc)
+            else:
+                started = started.astimezone(timezone.utc)
+
+            now = datetime.now(timezone.utc)
+            elapsed = (now - started).total_seconds()
             if self.progress > 0:
                 estimated_total = (elapsed / self.progress) * 100
                 remaining = estimated_total - elapsed
-                estimated_completion = datetime.now(timezone.utc) + timedelta(seconds=remaining)
+                estimated_completion = now + timedelta(seconds=remaining)
                 return estimated_completion.isoformat()
-        
+
         return None
 
     def update_progress(self, progress: int, message: str = None):

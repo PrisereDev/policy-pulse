@@ -1,10 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@clerk/nextjs";
 import { useCreateAnalysis } from "@/hooks/use-analysis";
-import { Logo } from "@/components/brand/logo";
+import { AppLogoWithBusiness } from "@/components/brand/app-logo-with-business";
 import { PageHeader } from "@/components/brand/page-header";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -14,17 +14,25 @@ import Link from "next/link";
 import { ArrowLeft, ArrowRight } from "lucide-react";
 
 export default function UploadPage() {
-  const { isLoaded, userId } = useAuth();
+  const { isLoaded, isSignedIn } = useAuth();
   const router = useRouter();
   const [baselineFile, setBaselineFile] = useState<File | null>(null);
   const [renewalFile, setRenewalFile] = useState<File | null>(null);
   
   const createAnalysisMutation = useCreateAnalysis();
 
-  // Redirect if not authenticated
-  if (isLoaded && !userId) {
-    router.push("/sign-in");
-    return null;
+  useEffect(() => {
+    if (isLoaded && isSignedIn === false) {
+      router.replace("/sign-in");
+    }
+  }, [isLoaded, isSignedIn, router]);
+
+  if (!isLoaded || isSignedIn !== true) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-prisere-maroon" />
+      </div>
+    );
   }
 
   const handleStartAnalysis = async () => {
@@ -50,7 +58,7 @@ export default function UploadPage() {
       {/* Header */}
       <header className="border-b bg-white px-6 py-4">
         <div className="flex items-center justify-between max-w-7xl mx-auto">
-          <Logo />
+          <AppLogoWithBusiness />
           <UserButton afterSignOutUrl="/" />
         </div>
       </header>

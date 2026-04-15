@@ -161,6 +161,22 @@ IMPORTANT RULES:
 - You MUST return ONLY a single valid JSON object — no markdown, no commentary.
 - If the document is unreadable or empty, still return the JSON structure with
   empty arrays and "UNKNOWN" values. Never return an empty response.
+
+NAMED INSURED / COMPANY NAME (policy_data.policy_metadata.named_insured):
+- This field is shown in the app as the customer's **business name**. It must be
+  the legal **business entity** when one is stated (e.g. "Prisere LLC"), not only
+  an individual person's name when both appear.
+- Scan the full document including: declarations, "Your business details" or
+  similar tables, schedules, policy jacket, and ACORD-style forms.
+- Many carriers (e.g. Hiscox, biBerk) use a row or label **"Business Name"** or
+  **"Company Name"** next to the LLC/Inc name — use THAT value for
+  `named_insured` when present, even if a separate **"Name"** row shows an
+  individual (e.g. owner). Prefer **Business Name / Company Name** over a
+  personal name alone when both exist.
+- Also match labels: "Named insured", "Insured", "Name of insured", "DBA".
+- Copy the name exactly as written; only trim leading/trailing whitespace.
+- If multiple entities are listed, use the primary operating company for the policy.
+- If no clear business or named insured appears, set "named_insured" to "" (not "UNKNOWN").
 {risk_section}
 ----- BEGIN POLICY DOCUMENT -----
 {policy_text}

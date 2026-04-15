@@ -233,21 +233,39 @@ async def get_current_user(
 
     except IntegrityError:
         db.rollback()
-        logger.warning(f"Duplicate email during user creation for {user_id}, retrying lookup")
+        logger.warning(
+            "IntegrityError during user creation for clerk_user_id=%s email=%s; resolving",
+            user_id,
+            email,
+        )
         user = db.query(User).filter(User.id == user_id).first()
         if user:
             return user
+
         existing = db.query(User).filter(User.email == email).first()
-        if existing:
-            logger.info(f"Found existing user by email, updating ID from {existing.id} to {user_id}")
-            existing.id = user_id
-            try:
-                db.commit()
-                db.refresh(existing)
-                return existing
-            except Exception:
-                db.rollback()
-                return existing
+        # Never merge accounts by reassigning User.id: that would attach the new Clerk
+        # identity to all analysis_jobs owned by the old Clerk user id (same email).
+        if existing and existing.id != user_id:
+            logger.warning(
+                "Removing stale local user id=%s for email=%s; replacing with clerk_user_id=%s",
+                existing.id,
+                email,
+                user_id,
+            )
+            db.delete(existing)
+            db.commit()
+            user = User(
+                id=user_id,
+                email=email,
+                name=name,
+                company_name=None,
+            )
+            db.add(user)
+            db.commit()
+            db.refresh(user)
+            logger.info(f"Created user after removing stale row: {user_id} ({email})")
+            return user
+
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to create user account"

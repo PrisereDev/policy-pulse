@@ -12,8 +12,8 @@ import { Shield, ArrowRight } from "lucide-react";
 import { setSkipGapUploadIntent } from "@/lib/prisere-dashboard-session";
 
 export default function OnboardingUploadPage() {
-  const { isLoaded, userId } = useAuth();
-  const { user } = useUser();
+  const { isLoaded, isSignedIn } = useAuth();
+  const { user, isLoaded: userLoaded } = useUser();
   const router = useRouter();
   const [policyFile, setPolicyFile] = useState<File | null>(null);
   const createGapAnalysis = useCreateGapAnalysis();
@@ -51,14 +51,18 @@ export default function OnboardingUploadPage() {
 
   useEffect(() => {
     if (!isLoaded) return;
-    if (!userId) {
-      router.push("/sign-in");
-    } else if (!onboardingAnswers) {
-      router.push("/onboarding");
+    if (isSignedIn === false) {
+      router.replace("/sign-in");
+      return;
     }
-  }, [isLoaded, userId, onboardingAnswers, router]);
+    /** Answers may live only in Clerk metadata; until `user` is loaded, missing answers must not redirect. */
+    if (!userLoaded) return;
+    if (isSignedIn === true && !onboardingAnswers) {
+      router.replace("/onboarding");
+    }
+  }, [isLoaded, isSignedIn, userLoaded, onboardingAnswers, router]);
 
-  if (!isLoaded || !userId || !onboardingAnswers) {
+  if (!isLoaded || isSignedIn !== true || !userLoaded || !onboardingAnswers) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-prisere-maroon" />

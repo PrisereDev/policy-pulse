@@ -3,8 +3,9 @@ Background analysis processor for comparing insurance policies.
 """
 import asyncio
 import logging
+import re
 from datetime import datetime, timezone
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 import traceback
 
 from sqlalchemy.orm import Session
@@ -17,6 +18,70 @@ from app.services.pdf_service import pdf_service
 from app.services.claude_service import claude_service
 
 logger = logging.getLogger(__name__)
+
+
+def _extract_business_name_from_policy_text(policy_text: str) -> Optional[str]:
+    """
+    Regex fallback when the model omits LLC/Inc: many PDFs use a 'Business Name'
+    row (e.g. Hiscox) that must win over a personal 'Name' field.
+    """
+    if not policy_text or not policy_text.strip():
+        return None
+    for pat in (
+        r"(?i)business\s+name\s*[:#]?\s*([^\n\r]+)",
+        r"(?i)company\s+name\s*[:#]?\s*([^\n\r]+)",
+    ):
+        m = re.search(pat, policy_text)
+        if m:
+            candidate = m.group(1).strip()
+            candidate = re.sub(r"\s+", " ", candidate)
+            if len(candidate) >= 2 and candidate.upper() != "UNKNOWN":
+                return candidate[:300]
+    return None
+
+
+def _looks_like_company_entity(s: str) -> bool:
+    u = s.upper()
+    return any(
+        x in u
+        for x in (
+            "LLC",
+            "INC",
+            "CORP",
+            "L.L.C.",
+            " LLP",
+            " LP",
+            "LTD",
+            "PLLC",
+            "COMPANY",
+        )
+    )
+
+
+def _merge_named_insured(
+    ai_raw: Optional[str], policy_text: str
+) -> Optional[str]:
+    """Prefer Business Name/Company Name from text if AI returned only a person name."""
+    ai = None
+    if ai_raw is not None:
+        s = str(ai_raw).strip()
+        if s and s.upper() != "UNKNOWN":
+            ai = s
+
+    from_text = _extract_business_name_from_policy_text(policy_text)
+
+    if from_text and not ai:
+        return from_text
+    if from_text and ai and from_text.strip().upper() != ai.strip().upper():
+        if _looks_like_company_entity(from_text) and not _looks_like_company_entity(ai):
+            logger.info(
+                "Using Business Name/Company Name from policy text over AI named_insured "
+                "(entity vs individual): %r -> %r",
+                ai,
+                from_text,
+            )
+            return from_text
+    return ai
 
 
 class AnalysisProcessor:
@@ -270,16 +335,51 @@ class AnalysisProcessor:
 
             policy_data = claude_data.get("policy_data", {})
             policy_meta = policy_data.get("policy_metadata", {}) if isinstance(policy_data, dict) else {}
+            if not isinstance(policy_meta, dict):
+                policy_meta = {}
+
+            def _normalize_named_insured(raw) -> Optional[str]:
+                if raw is None:
+                    return None
+                s = str(raw).strip()
+                if not s or s.upper() == "UNKNOWN":
+                    return None
+                return s
+
+            def _normalize_expiration_raw(raw) -> Optional[str]:
+                if raw is None:
+                    return None
+                s = str(raw).strip()
+                if not s or s.upper() == "UNKNOWN":
+                    return None
+                return s
+
+            named_insured = _merge_named_insured(
+                policy_meta.get("named_insured"), policy_text
+            )
+            named_insured = _normalize_named_insured(named_insured)
+            policy_expiration_raw = _normalize_expiration_raw(
+                policy_meta.get("effective_dates")
+            )
 
             processing_time = int((datetime.now(timezone.utc) - start_time).total_seconds())
 
             # Save result as JSON in AnalysisResult
             gap_result_payload = {
                 "gaps": gaps,
-                "business_name": policy_meta.get("named_insured"),
-                "policy_expiration_date": policy_meta.get("effective_dates"),
+                "business_name": named_insured,
+                "policy_expiration_date": policy_expiration_raw,
                 "summary": f"Found {len(gaps)} coverage gap(s) with {len(recommendations)} endorsement recommendation(s).",
                 "recommendations": recommendations,
+            }
+
+            # Persist gap-only fields (named insured, expiry) for GET /gap-result — stored
+            # here because AnalysisResult has no dedicated columns for gap metadata.
+            gap_meta_insight = {
+                "change_type": "gap_policy_metadata",
+                "insight": "",
+                "business_name": named_insured,
+                "policy_expiration_date": policy_expiration_raw,
             }
 
             with get_db_context() as db:
@@ -295,7 +395,7 @@ class AnalysisProcessor:
                     changes=gap_result_payload.get("gaps", []),
                     premium_comparison=None,
                     suggested_actions=[{"action": r} for r in recommendations],
-                    educational_insights=[],
+                    educational_insights=[gap_meta_insight],
                     model_version=claude_service.model,
                     processing_time_seconds=processing_time,
                 )

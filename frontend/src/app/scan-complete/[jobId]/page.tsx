@@ -3,9 +3,10 @@
 import { use, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { Logo } from "@/components/brand/logo";
+import { resolveBusinessDisplayName } from "@/lib/business-display-name";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { UserButton } from "@clerk/nextjs";
+import { UserButton, useUser } from "@clerk/nextjs";
 import { useGapAnalysisResult } from "@/hooks/use-analysis";
 import { QueryErrorBoundary } from "@/components/query-error-boundary";
 import {
@@ -37,11 +38,17 @@ function ScanCompleteContent({
 }) {
   const resolvedParams = use(params);
   const router = useRouter();
+  const { user } = useUser();
   const {
     data: result,
     isLoading,
     error,
   } = useGapAnalysisResult(resolvedParams.jobId);
+
+  const businessDisplay = useMemo(
+    () => resolveBusinessDisplayName(result?.business_name, user),
+    [result?.business_name, user]
+  );
 
   useEffect(() => {
     window.scrollTo(0, 0);
@@ -81,7 +88,10 @@ function ScanCompleteContent({
     <div className="min-h-screen bg-gray-50">
       <header className="border-b bg-white px-6 py-4">
         <div className="flex items-center justify-between max-w-7xl mx-auto">
-          <Logo />
+          <Logo
+            businessLabel={businessDisplay.label}
+            businessLabelIsPlaceholder={businessDisplay.isPlaceholder}
+          />
           <UserButton afterSignOutUrl="/" />
         </div>
       </header>
