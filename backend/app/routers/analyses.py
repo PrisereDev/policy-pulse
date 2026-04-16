@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from typing import List, Optional, Tuple
 import logging
 import asyncio
+import time
 
 from app.database import get_db
 from app.models.user import User
@@ -221,10 +222,9 @@ async def create_analysis(
     Create a new analysis job.
     
     This endpoint:
-    1. Validates that both PDFs exist in S3
-    2. Creates a job record in the database
-    3. Returns the job_id immediately
-    4. Starts background processing asynchronously
+    1. Creates a job record in the database
+    2. Returns the job_id immediately
+    3. Starts background processing asynchronously
     
     The client should poll GET /analyses/{job_id}/status to check progress.
     
@@ -241,21 +241,6 @@ async def create_analysis(
         logger.info(f"Creating analysis job for user: {user.id}")
         logger.info(f"Baseline S3 key: {request.baseline_s3_key}")
         logger.info(f"Renewal S3 key: {request.renewal_s3_key}")
-        
-        # Validate that both files exist in S3
-        if not s3_service.file_exists(request.baseline_s3_key):
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Baseline file not found in S3: {request.baseline_s3_key}"
-            )
-        
-        if not s3_service.file_exists(request.renewal_s3_key):
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Renewal file not found in S3: {request.renewal_s3_key}"
-            )
-        
-        logger.info("Both PDF files verified in S3")
         
         # Extract filenames from S3 keys
         baseline_filename = request.baseline_s3_key.split('/')[-1]
@@ -274,11 +259,15 @@ async def create_analysis(
             progress=0,
             status_message="Job created, waiting to start..."
         )
-        
+
+        t_analysis_job_db = time.perf_counter()  # TEMP timing
         db.add(job)
         db.commit()
         db.refresh(job)
-        
+        logger.info(
+            f"[TIMING] create_analysis AnalysisJob add+commit+refresh: {time.perf_counter() - t_analysis_job_db:.3f}s"
+        )  # TEMP
+
         logger.info(f"Created analysis job: {job.id}")
         
         # Start background processing

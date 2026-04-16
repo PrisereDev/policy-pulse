@@ -8,8 +8,6 @@ from datetime import datetime, timezone
 from typing import Dict, Any, Optional
 import traceback
 
-from sqlalchemy.orm import Session
-
 from app.database import get_db_context
 from app.models.analysis_job import AnalysisJob, JobStatus
 from app.models.analysis_result import AnalysisResult
@@ -86,11 +84,15 @@ def _merge_named_insured(
 
 class AnalysisProcessor:
     """Process analysis jobs in the background."""
-    
+
     async def process_analysis_job(self, job_id: str) -> None:
+        """Runs comparison work in a worker thread so the event loop can serve /status polls."""
+        await asyncio.to_thread(self._process_analysis_job_sync, job_id)
+
+    def _process_analysis_job_sync(self, job_id: str) -> None:
         """
-        Process a single analysis job asynchronously.
-        
+        Process a single analysis job (blocking; invoked via asyncio.to_thread).
+
         This function:
         1. Downloads both PDFs from S3
         2. Extracts text from both PDFs
@@ -98,7 +100,7 @@ class AnalysisProcessor:
         4. Saves results to database
         5. Deletes PDFs from S3 (even if processing fails)
         6. Updates job status throughout
-        
+
         Args:
             job_id: The analysis job ID to process
         """
@@ -120,7 +122,7 @@ class AnalysisProcessor:
                 
                 # Mark job as processing
                 job.mark_processing()
-                job.update_progress(5, "Starting analysis...")
+                job.update_progress(5, "Preparing your comparison...")
                 db.commit()
                 
                 logger.info(f"Starting analysis job: {job_id}")
@@ -131,7 +133,7 @@ class AnalysisProcessor:
             logger.info(f"[{job_id}] Downloading baseline PDF from S3...")
             with get_db_context() as db:
                 job = db.query(AnalysisJob).filter(AnalysisJob.id == job_id).first()
-                job.update_progress(10, "Downloading baseline policy from S3...")
+                job.update_progress(10, "Downloading your current policy...")
                 db.commit()
             
             baseline_bytes = s3_service.download_file_content(baseline_s3_key)
@@ -141,7 +143,7 @@ class AnalysisProcessor:
             logger.info(f"[{job_id}] Downloading renewal PDF from S3...")
             with get_db_context() as db:
                 job = db.query(AnalysisJob).filter(AnalysisJob.id == job_id).first()
-                job.update_progress(20, "Downloading renewal policy from S3...")
+                job.update_progress(20, "Downloading your renewal policy...")
                 db.commit()
             
             renewal_bytes = s3_service.download_file_content(renewal_s3_key)
@@ -151,7 +153,7 @@ class AnalysisProcessor:
             logger.info(f"[{job_id}] Extracting text from baseline PDF...")
             with get_db_context() as db:
                 job = db.query(AnalysisJob).filter(AnalysisJob.id == job_id).first()
-                job.update_progress(30, "Extracting text from baseline policy...")
+                job.update_progress(30, "Extracting text from your current policy...")
                 db.commit()
             
             baseline_result = pdf_service.extract_text_with_metadata(baseline_bytes)
@@ -164,7 +166,7 @@ class AnalysisProcessor:
             logger.info(f"[{job_id}] Extracting text from renewal PDF...")
             with get_db_context() as db:
                 job = db.query(AnalysisJob).filter(AnalysisJob.id == job_id).first()
-                job.update_progress(40, "Extracting text from renewal policy...")
+                job.update_progress(40, "Extracting text from your renewal policy...")
                 db.commit()
             
             renewal_result = pdf_service.extract_text_with_metadata(renewal_bytes)
@@ -177,7 +179,7 @@ class AnalysisProcessor:
             logger.info(f"[{job_id}] Comparing policies with Claude AI...")
             with get_db_context() as db:
                 job = db.query(AnalysisJob).filter(AnalysisJob.id == job_id).first()
-                job.update_progress(50, "Analyzing policy differences with AI...")
+                job.update_progress(50, "Analyzing policy differences...")
                 db.commit()
             
             comparison_result = claude_service.compare_policies(
@@ -194,7 +196,7 @@ class AnalysisProcessor:
             logger.info(f"[{job_id}] Saving results to database...")
             with get_db_context() as db:
                 job = db.query(AnalysisJob).filter(AnalysisJob.id == job_id).first()
-                job.update_progress(90, "Saving analysis results...")
+                job.update_progress(90, "Finalizing analysis...")
                 db.commit()
             
             # Calculate processing time
@@ -263,6 +265,10 @@ class AnalysisProcessor:
 
 
     async def process_gap_analysis_job(self, job_id: str) -> None:
+        """Runs gap analysis work in a worker thread so the event loop can serve /status polls."""
+        await asyncio.to_thread(self._process_gap_analysis_job_sync, job_id)
+
+    def _process_gap_analysis_job_sync(self, job_id: str) -> None:
         """
         Process a gap analysis job: single policy + risk profile -> coverage gaps.
         """
@@ -278,7 +284,7 @@ class AnalysisProcessor:
 
                 policy_s3_key = job.baseline_s3_key
                 job.mark_processing()
-                job.update_progress(5, "Starting gap analysis...")
+                job.update_progress(5, "Preparing your analysis...")
                 db.commit()
 
             # Download policy PDF
@@ -304,7 +310,7 @@ class AnalysisProcessor:
             with get_db_context() as db:
                 job = db.query(AnalysisJob).filter(AnalysisJob.id == job_id).first()
                 risk_profile = job.risk_profile_data
-                job.update_progress(50, "Analyzing coverage gaps with AI...")
+                job.update_progress(50, "Analyzing policy differences...")
                 db.commit()
 
             claude_data = claude_service.analyze_gap_coverage(
@@ -384,7 +390,7 @@ class AnalysisProcessor:
 
             with get_db_context() as db:
                 job = db.query(AnalysisJob).filter(AnalysisJob.id == job_id).first()
-                job.update_progress(90, "Saving gap analysis results...")
+                job.update_progress(90, "Finalizing analysis...")
                 db.commit()
 
             with get_db_context() as db:

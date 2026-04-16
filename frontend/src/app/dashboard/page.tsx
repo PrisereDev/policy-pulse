@@ -36,8 +36,10 @@ import { GapAnalysisCard } from "@/components/gap-analysis/gap-analysis-card";
 import {
   useAnalysisHistory,
   useGapAnalysisResult,
+  CREATE_ANALYSIS_PROGRESS_LABELS,
   useCreateAnalysis,
   useCreateGapAnalysis,
+  type CreateAnalysisProgressStep,
 } from "@/hooks/use-analysis";
 import { useBusinessDisplayName } from "@/hooks/use-business-display-name";
 import type { AnalysisJob, CoverageGap } from "@/types/api";
@@ -67,6 +69,8 @@ function RenewalUploadSection() {
   const router = useRouter();
   const [baselineFile, setBaselineFile] = useState<File | null>(null);
   const [renewalFile, setRenewalFile] = useState<File | null>(null);
+  const [startAnalysisStep, setStartAnalysisStep] =
+    useState<CreateAnalysisProgressStep | null>(null);
   const createAnalysis = useCreateAnalysis();
 
   const handleStartAnalysis = async () => {
@@ -75,10 +79,13 @@ function RenewalUploadSection() {
       const result = await createAnalysis.mutateAsync({
         baselineFile,
         renewalFile,
+        onProgress: setStartAnalysisStep,
       });
       router.push(`/analysis/${result.job_id}`);
     } catch (error) {
       console.error("Failed to start analysis:", error);
+    } finally {
+      setStartAnalysisStep(null);
     }
   };
 
@@ -110,20 +117,30 @@ function RenewalUploadSection() {
           onFileRemove={() => setRenewalFile(null)}
         />
       </div>
-      <Button
-        onClick={handleStartAnalysis}
-        disabled={!baselineFile || !renewalFile || createAnalysis.isPending}
-        className="bg-prisere-maroon hover:bg-prisere-maroon/90 disabled:opacity-50"
-      >
-        {createAnalysis.isPending ? (
-          "Processing..."
-        ) : (
-          <>
-            Start Comparison
-            <ArrowRight className="ml-2 h-4 w-4" />
-          </>
-        )}
-      </Button>
+      <div className="flex flex-col gap-2 items-start">
+        <Button
+          onClick={handleStartAnalysis}
+          disabled={!baselineFile || !renewalFile || createAnalysis.isPending}
+          className="bg-prisere-maroon hover:bg-prisere-maroon/90 disabled:opacity-50"
+        >
+          {createAnalysis.isPending ? (
+            "Processing..."
+          ) : (
+            <>
+              Start Comparison
+              <ArrowRight className="ml-2 h-4 w-4" />
+            </>
+          )}
+        </Button>
+        {createAnalysis.isPending && startAnalysisStep !== null ? (
+          <p
+            className="text-sm text-gray-600"
+            style={{ fontFamily: "var(--font-body)" }}
+          >
+            {CREATE_ANALYSIS_PROGRESS_LABELS[startAnalysisStep]}
+          </p>
+        ) : null}
+      </div>
     </div>
   );
 }

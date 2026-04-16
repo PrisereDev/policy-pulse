@@ -22,6 +22,21 @@ export const ANALYSIS_QUERY_KEYS = {
     [...ANALYSIS_QUERY_KEYS.root(userId), "history"] as const,
 };
 
+/** Sub-steps while starting a renewal comparison (upload + create job). */
+export type CreateAnalysisProgressStep =
+  | "uploading_baseline"
+  | "uploading_renewal"
+  | "creating_job";
+
+export const CREATE_ANALYSIS_PROGRESS_LABELS: Record<
+  CreateAnalysisProgressStep,
+  string
+> = {
+  uploading_baseline: "Uploading current policy...",
+  uploading_renewal: "Uploading renewal policy...",
+  creating_job: "Starting your comparison…",
+};
+
 export function useCreateAnalysis() {
   const queryClient = useQueryClient();
   const { getToken, userId } = useAuth();
@@ -32,19 +47,27 @@ export function useCreateAnalysis() {
       baselineFile,
       renewalFile,
       metadata,
+      onProgress,
     }: {
       baselineFile: File;
       renewalFile: File;
       metadata?: { company_name?: string; policy_type?: string };
+      /** UX only: called as each sub-step begins (same order as before). */
+      onProgress?: (step: CreateAnalysisProgressStep) => void;
     }) => {
       try {
+        onProgress?.("uploading_baseline");
         const uploadToken = await getBackendAuthToken(getToken);
         const { baseline_s3_key, renewal_s3_key } = await analysisApi.uploadFiles(
           baselineFile,
           renewalFile,
-          uploadToken
+          uploadToken,
+          {
+            onAfterBaselineUpload: () => onProgress?.("uploading_renewal"),
+          }
         );
 
+        onProgress?.("creating_job");
         const createToken = await getBackendAuthToken(getToken);
         return analysisApi.createAnalysis(
           baseline_s3_key,
@@ -57,12 +80,13 @@ export function useCreateAnalysis() {
         throw e;
       }
     },
-    onSuccess: async (data: AnalysisJob) => {
+    onSuccess: (data: AnalysisJob) => {
       queryClient.setQueryData(
         ANALYSIS_QUERY_KEYS.status(userId, data.job_id),
         data
       );
-      await queryClient.invalidateQueries({
+      /** Do not await — `mutateAsync` must resolve as soon as the job exists so the UI can navigate immediately. */
+      void queryClient.invalidateQueries({
         queryKey: ANALYSIS_QUERY_KEYS.root(userId),
         refetchType: "active",
       });
@@ -193,12 +217,12 @@ export function useCreateGapAnalysis() {
         throw e;
       }
     },
-    onSuccess: async (data: AnalysisJob) => {
+    onSuccess: (data: AnalysisJob) => {
       queryClient.setQueryData(
         ANALYSIS_QUERY_KEYS.status(userId, data.job_id),
         data
       );
-      await queryClient.invalidateQueries({
+      void queryClient.invalidateQueries({
         queryKey: ANALYSIS_QUERY_KEYS.root(userId),
         refetchType: "active",
       });

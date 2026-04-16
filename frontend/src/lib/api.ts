@@ -105,7 +105,11 @@ export const analysisApi = {
   uploadFiles: async (
     baselineFile: File,
     renewalFile: File,
-    token?: string | null
+    token?: string | null,
+    options?: {
+      /** Fires after baseline S3 upload succeeds, before renewal init + upload. */
+      onAfterBaselineUpload?: () => void;
+    }
   ): Promise<{ baseline_s3_key: string; renewal_s3_key: string }> => {
     const baselineInit = await apiRequest<UploadInitResponse>("/uploads/init", {
       method: "POST",
@@ -132,6 +136,8 @@ export const analysisApi = {
         baselineS3Response.status
       );
     }
+
+    options?.onAfterBaselineUpload?.();
 
     const renewalInit = await apiRequest<UploadInitResponse>("/uploads/init", {
       method: "POST",

@@ -134,6 +134,14 @@ async def startup_event():
     logger.info("=" * 60)
 
 
+@app.on_event("shutdown")
+async def shutdown_event():
+    """Close shared HTTP clients."""
+    from app.utils.clerk_auth import close_clerk_http_client
+
+    await close_clerk_http_client()
+
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(

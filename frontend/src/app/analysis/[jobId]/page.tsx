@@ -7,6 +7,10 @@ import {
   useAnalysisResult,
   useGapAnalysisResult,
 } from "@/hooks/use-analysis";
+import {
+  useMidPhaseRotatingMessage,
+  useSmoothedAnalysisProgress,
+} from "@/hooks/use-smoothed-analysis-progress";
 import { AppLogoWithBusiness } from "@/components/brand/app-logo-with-business";
 import { LoadingSpinner } from "@/components/brand/loading-spinner";
 import { Card, CardContent } from "@/components/ui/card";
@@ -49,18 +53,33 @@ export default function AnalysisPage({
   /** Don’t show 100% until we can navigate — job may report 100 while client still loads result payload. */
   const waitingForResultPayload = isCompleted && !result;
 
+  const rawProgress =
+    typeof analysisJob?.progress === "number" && Number.isFinite(analysisJob.progress)
+      ? Math.min(100, Math.max(0, analysisJob.progress))
+      : 0;
+
+  const smoothedProgress = useSmoothedAnalysisProgress(
+    resolvedParams.jobId,
+    analysisJob?.progress ?? undefined,
+    analysisJob?.status
+  );
+
+  const midPhaseActive =
+    !isFailed &&
+    !isCompleted &&
+    analysisJob?.status === "processing" &&
+    rawProgress >= 50 &&
+    rawProgress < 90;
+
+  const rotatingMessage = useMidPhaseRotatingMessage(midPhaseActive, isGap);
+
   const displayProgress = useMemo(() => {
     if (statusLoading && !analysisJob) return 0;
-    const raw = analysisJob?.progress;
-    const p =
-      typeof raw === "number" && Number.isFinite(raw)
-        ? Math.min(100, Math.max(0, raw))
-        : 0;
     if (waitingForResultPayload) {
-      return Math.min(p, 98);
+      return Math.min(smoothedProgress, 98);
     }
-    return p;
-  }, [analysisJob, statusLoading, waitingForResultPayload]);
+    return smoothedProgress;
+  }, [analysisJob, statusLoading, waitingForResultPayload, smoothedProgress]);
 
   const displayMessage = useMemo(() => {
     if (isFailed) {
@@ -72,20 +91,23 @@ export default function AnalysisPage({
     if (waitingForResultPayload) {
       return "Loading your results…";
     }
+    if (analysisJob?.status === "completed") {
+      return "Complete!";
+    }
+    if (rotatingMessage) {
+      return rotatingMessage;
+    }
     if (analysisJob?.message) {
       return analysisJob.message;
     }
     if (!analysisJob) {
       return "Starting analysis…";
     }
-    if (analysisJob.status === "completed") {
-      return "Complete!";
-    }
     if (analysisJob.status === "pending") {
       return "Queued…";
     }
     return "Processing your policy…";
-  }, [analysisJob, isFailed, waitingForResultPayload]);
+  }, [analysisJob, isFailed, waitingForResultPayload, rotatingMessage]);
 
   useEffect(() => {
     if (!isCompleted || !result) return;
@@ -147,7 +169,7 @@ export default function AnalysisPage({
               <Progress value={displayProgress} className="h-3" />
 
               <p className="text-center text-sm text-gray-500">
-                {displayProgress}% complete
+                {Math.round(displayProgress)}% complete
               </p>
             </div>
           </CardContent>
