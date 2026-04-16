@@ -2,7 +2,7 @@
 
 import { use, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { useUser, UserButton } from "@clerk/nextjs";
+import { useAuth, useUser, UserButton } from "@clerk/nextjs";
 import { Logo } from "@/components/brand/logo";
 import { resolveBusinessDisplayName } from "@/lib/business-display-name";
 import { Button } from "@/components/ui/button";
@@ -45,6 +45,8 @@ function formatPremiumDelta(result: {
 
 function ResultsContent({ params }: { params: Promise<{ jobId: string }> }) {
   const resolvedParams = use(params);
+  const { isLoaded, isSignedIn } = useAuth();
+  const authReady = isLoaded && isSignedIn === true;
   const { user } = useUser();
   const { data: result, isLoading, error } = useAnalysisResult(
     resolvedParams.jobId
@@ -120,7 +122,7 @@ function ResultsContent({ params }: { params: Promise<{ jobId: string }> }) {
     window.scrollTo(0, 0);
   }, []);
 
-  if (isLoading) {
+  if (isLoading || !authReady) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">

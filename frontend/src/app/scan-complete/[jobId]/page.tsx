@@ -6,7 +6,7 @@ import { Logo } from "@/components/brand/logo";
 import { resolveBusinessDisplayName } from "@/lib/business-display-name";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { UserButton, useUser } from "@clerk/nextjs";
+import { useAuth, UserButton, useUser } from "@clerk/nextjs";
 import { useGapAnalysisResult } from "@/hooks/use-analysis";
 import { QueryErrorBoundary } from "@/components/query-error-boundary";
 import {
@@ -38,6 +38,8 @@ function ScanCompleteContent({
 }) {
   const resolvedParams = use(params);
   const router = useRouter();
+  const { isLoaded, isSignedIn } = useAuth();
+  const authReady = isLoaded && isSignedIn === true;
   const { user } = useUser();
   const {
     data: result,
@@ -69,7 +71,7 @@ function ScanCompleteContent({
     };
   }, [result]);
 
-  if (isLoading) {
+  if (isLoading || !authReady) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
