@@ -669,7 +669,7 @@ function RenewalCountdownSection({
   if (status === "unknown") {
     return (
       <Card className="border-amber-200/90 bg-amber-50/90 shadow-sm rounded-lg">
-        <CardContent className="p-6">
+        <CardContent className="px-6 py-4">
           <div className="flex items-start gap-4">
             {iconWrap}
             {copy}
@@ -682,7 +682,7 @@ function RenewalCountdownSection({
   if (status === "safe") {
     return (
       <Card className="border-green-200/90 bg-green-50/70 shadow-sm">
-        <CardContent className="p-5">
+        <CardContent className="px-6 py-4">
           <div className="flex items-start gap-4">
             {iconWrap}
             {copy}
@@ -695,7 +695,7 @@ function RenewalCountdownSection({
   if (status === "warning") {
     return (
       <Card className="border-prisere-mustard/35 bg-amber-50/50 shadow-sm">
-        <CardContent className="p-5">
+        <CardContent className="px-6 py-4">
           <div className="flex items-start gap-4">
             {iconWrap}
             {copy}
@@ -707,7 +707,7 @@ function RenewalCountdownSection({
 
   return (
     <Card className="border-red-200/90 bg-red-50/80 shadow-md">
-      <CardContent className="p-6">
+      <CardContent className="px-6 py-4">
         <div className="flex items-start gap-4">
           {iconWrap}
           {copy}
@@ -830,7 +830,6 @@ function DashboardContent() {
   const searchParams = useSearchParams();
   const [profileModalOpen, setProfileModalOpen] = useState(false);
   const [profileUpdatedBanner, setProfileUpdatedBanner] = useState(false);
-  const [showTempGapUpload, setShowTempGapUpload] = useState(false);
   const {
     data: analyses = [],
     isLoading: historyLoading,
@@ -1033,20 +1032,6 @@ function DashboardContent() {
           />
         </div>
 
-        {/* TEMP TEST CTA: quickly reopen gap-analysis upload for expiry testing */}
-        <div className="mb-4">
-          <Button
-            type="button"
-            variant="outline"
-            className="border-prisere-maroon text-prisere-maroon hover:bg-prisere-maroon/5"
-            onClick={() => setShowTempGapUpload((prev) => !prev)}
-          >
-            {showTempGapUpload
-              ? "Hide temp coverage gap upload"
-              : "Temp: rerun coverage gap analysis"}
-          </Button>
-        </div>
-
         {profileUpdatedBanner && (
           <div
             className="mb-6 rounded-lg border border-prisere-mustard/40 bg-prisere-mustard/10 px-4 py-3 text-sm text-prisere-dark-gray"
@@ -1065,11 +1050,10 @@ function DashboardContent() {
           />
         ) : (
           <>
-            {(profileUpdatedBanner || showTempGapUpload) && (
+            {profileUpdatedBanner && (
               <DashboardGapReuploadSection
                 onAnalysisStarted={() => {
                   setProfileUpdatedBanner(false);
-                  setShowTempGapUpload(false);
                 }}
               />
             )}
