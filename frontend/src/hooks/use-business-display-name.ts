@@ -11,8 +11,8 @@ function isGapAnalysisJob(a: AnalysisJob): boolean {
 }
 
 /**
- * Business label for headers: uses named insured from the latest completed gap
- * (coverage) analysis when available, then profile/onboarding, then placeholder.
+ * Business label for headers: named insured from the latest completed gap
+ * analysis when present; otherwise "{first}'s Business" or "Your Business".
  */
 export function useBusinessDisplayName() {
   const { user } = useUser();

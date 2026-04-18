@@ -21,6 +21,8 @@ import { useOnboardingGuard } from "@/hooks/use-onboarding";
 import { BusinessProfileModal } from "@/components/profile/business-profile-modal";
 import { Logo } from "@/components/brand/logo";
 import { resolveBusinessDisplayName } from "@/lib/business-display-name";
+import { parseGapPolicyExpiry } from "@/lib/gap-expiry";
+import { getExpiryDisplay } from "@/lib/expiry-display";
 import { PageHeader } from "@/components/brand/page-header";
 import { Button } from "@/components/ui/button";
 import {
@@ -508,15 +510,37 @@ function DashboardGapReuploadSection({
 // Stat tiles
 // ---------------------------------------------------------------------------
 
+const expiryTileStyles = {
+  neutral: {
+    top: "text-prisere-mustard",
+  },
+  safe: {
+    top: "text-green-700",
+  },
+  warning: {
+    top: "text-prisere-mustard",
+  },
+  urgent: {
+    top: "text-red-600",
+  },
+  expired: {
+    top: "text-red-700",
+  },
+} as const;
+
 function StatTiles({
   gapCount,
   locationCount,
-  daysUntilExpiry,
+  policyExpirationDate,
 }: {
   gapCount: number;
   locationCount: number;
-  daysUntilExpiry: number | null;
+  policyExpirationDate: string | null;
 }) {
+  const expiry = getExpiryDisplay(policyExpirationDate);
+  const exStyle =
+    expiryTileStyles[expiry.status as keyof typeof expiryTileStyles];
+
   return (
     <div className="grid gap-4 grid-cols-1 sm:grid-cols-3">
       <Card className="border-gray-200/90 bg-gray-100/80 shadow-none">
@@ -541,11 +565,18 @@ function StatTiles({
       </Card>
       <Card className="border-gray-200/90 bg-gray-100/80 shadow-none sm:col-span-1 col-span-1">
         <CardContent className="p-5 text-center">
-          <p className="text-3xl font-semibold tabular-nums text-prisere-mustard">
-            {daysUntilExpiry !== null ? `${daysUntilExpiry}d` : "—"}
+          <p
+            className={cn(
+              "text-3xl font-semibold tabular-nums leading-tight min-h-[2.25rem] flex items-center justify-center",
+              exStyle.top
+            )}
+          >
+            {expiry.topText}
           </p>
-          <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mt-1">
-            Until expiry
+          <p
+            className="text-xs font-medium text-gray-500 uppercase tracking-wide"
+          >
+            {expiry.bottomLabel}
           </p>
         </CardContent>
       </Card>
@@ -568,15 +599,15 @@ function RenewalCountdownSection({
 }) {
   const hasExpiry = typeof daysAway === "number" && !Number.isNaN(daysAway);
 
-  const urgency = !hasExpiry
+  const status = !hasExpiry
     ? "unknown"
-    : daysAway <= 14
-      ? "critical"
+    : daysAway < 0
+      ? "expired"
       : daysAway <= 30
-        ? "high"
-        : daysAway <= 60
-          ? "medium"
-          : "low";
+        ? "urgent"
+        : daysAway <= 120
+          ? "warning"
+          : "safe";
 
   const uploadBtn = (
     <Button
@@ -593,10 +624,12 @@ function RenewalCountdownSection({
         <p
           className={cn(
             "font-semibold text-prisere-dark-gray",
-            urgency === "critical" && "text-lg"
+            (status === "urgent" || status === "expired") && "text-lg"
           )}
         >
-          Your policy expires in {daysAway} day{daysAway !== 1 ? "s" : ""}.
+          {daysAway! < 0
+            ? `Your policy expired ${Math.abs(daysAway!)} day${Math.abs(daysAway!) !== 1 ? "s" : ""} ago.`
+            : `Your policy expires in ${daysAway} day${daysAway !== 1 ? "s" : ""}.`}
         </p>
       )}
       <p
@@ -615,25 +648,25 @@ function RenewalCountdownSection({
     <div
       className={cn(
         "rounded-full p-2 flex-shrink-0 self-start",
-        urgency === "unknown" && "bg-amber-100",
-        urgency === "low" && "bg-gray-100",
-        urgency === "medium" && "bg-prisere-mustard/15",
-        (urgency === "high" || urgency === "critical") && "bg-amber-100"
+        status === "unknown" && "bg-amber-100",
+        status === "safe" && "bg-green-100",
+        status === "warning" && "bg-prisere-mustard/15",
+        (status === "urgent" || status === "expired") && "bg-red-100"
       )}
     >
       <AlertTriangle
         className={cn(
           "h-5 w-5",
-          urgency === "unknown" && "text-amber-700",
-          urgency === "low" && "text-gray-400",
-          urgency === "medium" && "text-prisere-mustard",
-          (urgency === "high" || urgency === "critical") && "text-amber-700"
+          status === "unknown" && "text-amber-700",
+          status === "safe" && "text-green-700",
+          status === "warning" && "text-prisere-mustard",
+          (status === "urgent" || status === "expired") && "text-red-700"
         )}
       />
     </div>
   );
 
-  if (urgency === "unknown") {
+  if (status === "unknown") {
     return (
       <Card className="border-amber-200/90 bg-amber-50/90 shadow-sm rounded-lg">
         <CardContent className="p-6">
@@ -646,18 +679,20 @@ function RenewalCountdownSection({
     );
   }
 
-  if (urgency === "low") {
+  if (status === "safe") {
     return (
-      <div className="rounded-lg border border-gray-200 bg-white px-4 py-4">
-        <div className="flex items-start gap-3">
-          {iconWrap}
-          {copy}
-        </div>
-      </div>
+      <Card className="border-green-200/90 bg-green-50/70 shadow-sm">
+        <CardContent className="p-5">
+          <div className="flex items-start gap-4">
+            {iconWrap}
+            {copy}
+          </div>
+        </CardContent>
+      </Card>
     );
   }
 
-  if (urgency === "medium") {
+  if (status === "warning") {
     return (
       <Card className="border-prisere-mustard/35 bg-amber-50/50 shadow-sm">
         <CardContent className="p-5">
@@ -671,14 +706,7 @@ function RenewalCountdownSection({
   }
 
   return (
-    <Card
-      className={cn(
-        "border-amber-200/90 shadow-md",
-        urgency === "critical"
-          ? "bg-amber-50 ring-2 ring-amber-300/60"
-          : "bg-amber-50/90"
-      )}
-    >
+    <Card className="border-red-200/90 bg-red-50/80 shadow-md">
       <CardContent className="p-6">
         <div className="flex items-start gap-4">
           {iconWrap}
@@ -720,6 +748,7 @@ const statusConfig: Record<
 };
 
 function AnalysisHistoryRow({ analysis }: { analysis: AnalysisJob }) {
+  const { user } = useUser();
   const config = statusConfig[analysis.status] ?? statusConfig.failed;
   const StatusIcon = config.icon;
   const timeAgo = formatDistanceToNow(new Date(analysis.created_at), {
@@ -727,6 +756,10 @@ function AnalysisHistoryRow({ analysis }: { analysis: AnalysisJob }) {
   });
   const gap = isGapAnalysisJob(analysis);
   const title = gap ? "Coverage gap analysis" : "Renewal comparison";
+  const businessLine = useMemo(() => {
+    if (!gap || analysis.status !== "completed") return null;
+    return resolveBusinessDisplayName(analysis.business_name, user).label;
+  }, [gap, analysis.status, analysis.business_name, user]);
   const detailLine = gap
     ? `${analysis.baseline_filename}`
     : `${analysis.baseline_filename} · ${analysis.renewal_filename ?? "renewal"}`;
@@ -760,6 +793,11 @@ function AnalysisHistoryRow({ analysis }: { analysis: AnalysisJob }) {
               {gap ? "Gap" : "Renewal"}
             </Badge>
           </div>
+          {businessLine && (
+            <p className="text-xs font-medium text-prisere-dark-gray/90 truncate mt-0.5">
+              {businessLine}
+            </p>
+          )}
           <p className="text-xs text-gray-500 truncate mt-0.5">{detailLine}</p>
           <p className="text-xs text-gray-400 mt-0.5">{timeAgo}</p>
         </div>
@@ -792,6 +830,7 @@ function DashboardContent() {
   const searchParams = useSearchParams();
   const [profileModalOpen, setProfileModalOpen] = useState(false);
   const [profileUpdatedBanner, setProfileUpdatedBanner] = useState(false);
+  const [showTempGapUpload, setShowTempGapUpload] = useState(false);
   const {
     data: analyses = [],
     isLoading: historyLoading,
@@ -860,21 +899,19 @@ function DashboardContent() {
   }, [gapResult]);
 
   const expiryInfo = useMemo(() => {
-    if (!gapResult?.policy_expiration_date) return null;
-    const target = new Date(gapResult.policy_expiration_date);
-    const now = new Date();
-    const daysAway = Math.ceil(
-      (target.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)
-    );
-    return {
-      daysAway,
-      formatted: target.toLocaleDateString("en-US", {
-        month: "long",
-        day: "numeric",
-        year: "numeric",
-      }),
-    };
-  }, [gapResult]);
+    return parseGapPolicyExpiry(gapResult?.policy_expiration_date);
+  }, [gapResult?.policy_expiration_date]);
+
+  useEffect(() => {
+    if (process.env.NODE_ENV !== "development") return;
+    if (!gapResult && !gapJobId) return;
+    console.debug("[dashboard-expiry]", {
+      gapJobId,
+      rawPolicyExpirationDate: gapResult?.policy_expiration_date ?? null,
+      parsedExpiry: parseGapPolicyExpiry(gapResult?.policy_expiration_date),
+      expiryDisplay: getExpiryDisplay(gapResult?.policy_expiration_date ?? null),
+    });
+  }, [gapJobId, gapResult?.policy_expiration_date]);
 
   const rawOnboarding = user?.unsafeMetadata?.hasCompletedOnboarding;
   const onboardingDone =
@@ -996,6 +1033,20 @@ function DashboardContent() {
           />
         </div>
 
+        {/* TEMP TEST CTA: quickly reopen gap-analysis upload for expiry testing */}
+        <div className="mb-4">
+          <Button
+            type="button"
+            variant="outline"
+            className="border-prisere-maroon text-prisere-maroon hover:bg-prisere-maroon/5"
+            onClick={() => setShowTempGapUpload((prev) => !prev)}
+          >
+            {showTempGapUpload
+              ? "Hide temp coverage gap upload"
+              : "Temp: rerun coverage gap analysis"}
+          </Button>
+        </div>
+
         {profileUpdatedBanner && (
           <div
             className="mb-6 rounded-lg border border-prisere-mustard/40 bg-prisere-mustard/10 px-4 py-3 text-sm text-prisere-dark-gray"
@@ -1014,9 +1065,12 @@ function DashboardContent() {
           />
         ) : (
           <>
-            {profileUpdatedBanner && (
+            {(profileUpdatedBanner || showTempGapUpload) && (
               <DashboardGapReuploadSection
-                onAnalysisStarted={() => setProfileUpdatedBanner(false)}
+                onAnalysisStarted={() => {
+                  setProfileUpdatedBanner(false);
+                  setShowTempGapUpload(false);
+                }}
               />
             )}
 
@@ -1027,7 +1081,9 @@ function DashboardContent() {
                   <StatTiles
                     gapCount={gapCount}
                     locationCount={locations.length || 1}
-                    daysUntilExpiry={expiryInfo?.daysAway ?? null}
+                    policyExpirationDate={
+                      gapResult?.policy_expiration_date ?? null
+                    }
                   />
                 </div>
 

@@ -82,6 +82,56 @@ def _merge_named_insured(
     return ai
 
 
+def _normalize_policy_expiration(raw: Any) -> Optional[str]:
+    """
+    Normalize Claude's policy_metadata.effective_dates into canonical ISO date.
+
+    Returns:
+      - YYYY-MM-DD when a valid expiration/end date can be extracted
+      - None when no valid date can be confidently extracted
+    """
+    if raw is None:
+        return None
+
+    s = str(raw).strip()
+    if not s or s.upper() == "UNKNOWN":
+        return None
+
+    # Extract all date-like tokens and use the LAST token as expiration/end.
+    date_pattern = re.compile(
+        r"(?ix)"
+        r"(?:"
+        r"[A-Za-z]{3,9}\s+\d{1,2},?\s+\d{4}"   # May 12, 2025 / May 12 2025
+        r"|"
+        r"\d{1,2}/\d{1,2}/\d{2,4}"             # 05/12/2025 or 05/12/25
+        r"|"
+        r"\d{4}-\d{1,2}-\d{1,2}"               # 2025-05-12
+        r")"
+    )
+    tokens = [m.group(0).strip(" ,.;") for m in date_pattern.finditer(s)]
+    if not tokens:
+        return None
+
+    candidate = tokens[-1]
+    formats = (
+        "%Y-%m-%d",
+        "%m/%d/%Y",
+        "%m/%d/%y",
+        "%B %d, %Y",
+        "%b %d, %Y",
+        "%B %d %Y",
+        "%b %d %Y",
+    )
+    for fmt in formats:
+        try:
+            parsed = datetime.strptime(candidate, fmt).date()
+            return parsed.isoformat()
+        except ValueError:
+            continue
+
+    return None
+
+
 class AnalysisProcessor:
     """Process analysis jobs in the background."""
 
@@ -352,20 +402,19 @@ class AnalysisProcessor:
                     return None
                 return s
 
-            def _normalize_expiration_raw(raw) -> Optional[str]:
-                if raw is None:
-                    return None
-                s = str(raw).strip()
-                if not s or s.upper() == "UNKNOWN":
-                    return None
-                return s
-
             named_insured = _merge_named_insured(
                 policy_meta.get("named_insured"), policy_text
             )
             named_insured = _normalize_named_insured(named_insured)
-            policy_expiration_raw = _normalize_expiration_raw(
-                policy_meta.get("effective_dates")
+            raw_effective_dates = policy_meta.get("effective_dates")
+            policy_expiration_date = _normalize_policy_expiration(
+                raw_effective_dates
+            )
+            logger.info(
+                "[%s] Gap expiration normalization: raw effective_dates=%r -> normalized expiration=%r",
+                job_id,
+                raw_effective_dates,
+                policy_expiration_date,
             )
 
             processing_time = int((datetime.now(timezone.utc) - start_time).total_seconds())
@@ -374,7 +423,7 @@ class AnalysisProcessor:
             gap_result_payload = {
                 "gaps": gaps,
                 "business_name": named_insured,
-                "policy_expiration_date": policy_expiration_raw,
+                "policy_expiration_date": policy_expiration_date,
                 "summary": f"Found {len(gaps)} coverage gap(s) with {len(recommendations)} endorsement recommendation(s).",
                 "recommendations": recommendations,
             }
@@ -385,7 +434,7 @@ class AnalysisProcessor:
                 "change_type": "gap_policy_metadata",
                 "insight": "",
                 "business_name": named_insured,
-                "policy_expiration_date": policy_expiration_raw,
+                "policy_expiration_date": policy_expiration_date,
             }
 
             with get_db_context() as db:

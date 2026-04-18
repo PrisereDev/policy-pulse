@@ -16,6 +16,8 @@ export interface AnalysisJob {
   baseline_filename: string;
   /** Absent or empty for gap-only (single-policy) analyses */
   renewal_filename?: string | null;
+  /** Insured/business name from policy extraction when job is completed gap analysis */
+  business_name?: string | null;
   /** 0–100 from GET /analyses/{job_id}/status while the job runs */
   progress?: number | null;
   /** Current step message from the worker */

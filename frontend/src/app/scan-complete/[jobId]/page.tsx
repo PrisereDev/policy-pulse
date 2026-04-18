@@ -4,6 +4,7 @@ import { use, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { Logo } from "@/components/brand/logo";
 import { resolveBusinessDisplayName } from "@/lib/business-display-name";
+import { parseGapPolicyExpiry } from "@/lib/gap-expiry";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { useAuth, UserButton, useUser } from "@clerk/nextjs";
@@ -15,21 +16,6 @@ import {
   AlertTriangle,
 } from "lucide-react";
 import Link from "next/link";
-
-function daysUntil(dateStr: string): number {
-  const target = new Date(dateStr);
-  const now = new Date();
-  const diffMs = target.getTime() - now.getTime();
-  return Math.ceil(diffMs / (1000 * 60 * 60 * 24));
-}
-
-function formatDate(dateStr: string): string {
-  return new Date(dateStr).toLocaleDateString("en-US", {
-    month: "long",
-    day: "numeric",
-    year: "numeric",
-  });
-}
 
 function ScanCompleteContent({
   params,
@@ -62,14 +48,13 @@ function ScanCompleteContent({
   }, [result]);
 
   const expirationInfo = useMemo(() => {
-    if (!result?.policy_expiration_date) return null;
-    const days = daysUntil(result.policy_expiration_date);
-    if (days > 45) return null;
+    const parsed = parseGapPolicyExpiry(result?.policy_expiration_date);
+    if (!parsed || parsed.daysAway > 45) return null;
     return {
-      date: formatDate(result.policy_expiration_date),
-      daysAway: days,
+      date: parsed.formatted,
+      daysAway: parsed.daysAway,
     };
-  }, [result]);
+  }, [result?.policy_expiration_date]);
 
   if (isLoading || !authReady) {
     return (
@@ -113,8 +98,8 @@ function ScanCompleteContent({
             style={{ fontFamily: "var(--font-body)" }}
           >
             {gapCount > 0
-              ? `We found ${gapCount} coverage gap${gapCount !== 1 ? "s" : ""} for ${result.business_name}. Your results are saved to your dashboard.`
-              : `Your policy covers all identified risks for ${result.business_name}. Your results are saved to your dashboard.`}
+              ? `We found ${gapCount} coverage gap${gapCount !== 1 ? "s" : ""} for ${businessDisplay.label}. Your results are saved to your dashboard.`
+              : `Your policy covers all identified risks for ${businessDisplay.label}. Your results are saved to your dashboard.`}
           </p>
         </div>
 

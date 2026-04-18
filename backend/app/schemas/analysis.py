@@ -85,7 +85,11 @@ class AnalysisListItem(BaseModel):
     renewal_filename: Optional[str] = None
     total_changes: Optional[int] = None
     company_name: Optional[str] = None
-    
+    business_name: Optional[str] = Field(
+        None,
+        description="Insured/business name extracted from the policy (gap_analysis only).",
+    )
+
     class Config:
         from_attributes = True
 

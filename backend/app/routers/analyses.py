@@ -659,7 +659,15 @@ async def list_analyses(
             total_changes = None
             if job.status == JobStatus.COMPLETED and job.result:
                 total_changes = job.result.total_changes
-            
+
+            gap_business_name = None
+            if (
+                job.job_type == "gap_analysis"
+                and job.status == JobStatus.COMPLETED
+                and job.result
+            ):
+                gap_business_name, _ = _gap_policy_metadata_from_result(job.result)
+
             result.append(AnalysisListItem(
                 job_id=job.id,
                 status=job.status.value,
@@ -668,7 +676,8 @@ async def list_analyses(
                 baseline_filename=job.baseline_filename,
                 renewal_filename=job.renewal_filename,
                 total_changes=total_changes,
-                company_name=job.metadata_company_name
+                company_name=job.metadata_company_name,
+                business_name=gap_business_name,
             ))
         
         return result

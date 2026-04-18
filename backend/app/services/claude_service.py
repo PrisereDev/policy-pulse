@@ -162,13 +162,18 @@ IMPORTANT RULES:
 - If the document is unreadable or empty, still return the JSON structure with
   empty arrays and "UNKNOWN" values. Never return an empty response.
 
-NAMED INSURED / COMPANY NAME (policy_data.policy_metadata.named_insured):
-- This field is shown in the app as the customer's **business name**. It must be
-  the legal **business entity** when one is stated (e.g. "Prisere LLC"), not only
-  an individual person's name when both appear.
+NAMED INSURED / BUSINESS NAME (policy_data.policy_metadata.named_insured):
+- This value is persisted and shown in the app as the **insured business name**.
+  It must be the legal **business entity** when one is clearly stated (e.g.
+  "Prisere LLC"), not a generic label you invent.
+- **Be conservative:** only fill `named_insured` when the policy text clearly
+  identifies the insured business or entity. If the document is ambiguous,
+  illegible, or only shows a person with no clear business name, set
+  `named_insured` to null. Do **not** guess, infer from industry alone, or make
+  up a company name.
 - Scan the full document including: declarations, "Your business details" or
   similar tables, schedules, policy jacket, and ACORD-style forms.
-- Many carriers (e.g. Hiscox, biBerk) use a row or label **"Business Name"** or
+- Many carriers (e.g. Hiscox, biBerk) use **"Business Name"** or
   **"Company Name"** next to the LLC/Inc name — use THAT value for
   `named_insured` when present, even if a separate **"Name"** row shows an
   individual (e.g. owner). Prefer **Business Name / Company Name** over a
@@ -176,7 +181,22 @@ NAMED INSURED / COMPANY NAME (policy_data.policy_metadata.named_insured):
 - Also match labels: "Named insured", "Insured", "Name of insured", "DBA".
 - Copy the name exactly as written; only trim leading/trailing whitespace.
 - If multiple entities are listed, use the primary operating company for the policy.
-- If no clear business or named insured appears, set "named_insured" to "" (not "UNKNOWN").
+- Use null (JSON null) when no insured business/entity name can be confidently
+  identified. Do not use the string "UNKNOWN". Empty string "" is acceptable
+  only when the field is present but empty in the document.
+
+POLICY EXPIRATION DATE (policy_data.policy_metadata.effective_dates):
+- This field is persisted as the **policy end / expiration date** (the date the
+  current policy term ends, after which coverage must be renewed or replaced).
+- Look in declarations, schedules, ACORD forms, and labels such as "Expiration",
+  "Expires", "Policy period" end date, "Through", or "To" (when paired with a range).
+- Return ONLY a single expiration/end date in **ISO 8601 format YYYY-MM-DD**.
+- If the policy shows a date range (for example "May 12, 2024 to May 12, 2025"),
+  return ONLY the END/expiration date.
+- If the policy uses a "Policy effective dates" section with "From" and "To",
+  the "To" date is the expiration date to return.
+- Do NOT return a full range string, freeform date text, or mixed formats.
+- **Be conservative:** if no expiration/end date is clearly stated, return null.
 {risk_section}
 ----- BEGIN POLICY DOCUMENT -----
 {policy_text}
@@ -188,8 +208,8 @@ Return a JSON object with exactly this structure:
   "policy_data": {{
     "policy_metadata": {{
       "policy_type": "",
-      "named_insured": "",
-      "effective_dates": "",
+      "named_insured": null,
+      "effective_dates": null,
       "locations_insured": [],
       "industry_description": "",
       "naics_or_class_code": ""
