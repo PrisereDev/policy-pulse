@@ -543,39 +543,37 @@ function StatTiles({
 
   return (
     <div className="grid gap-4 grid-cols-1 sm:grid-cols-3">
-      <Card className="border-gray-200/90 bg-gray-100/80 shadow-none">
-        <CardContent className="p-5 text-center">
-          <p className="text-3xl font-semibold tabular-nums text-prisere-mustard">
+      <Card className="border-gray-200/90 bg-gray-100/80 shadow-none py-0 gap-0">
+        <CardContent className="px-5 py-4 text-center">
+          <p className="text-3xl font-semibold tabular-nums leading-none text-prisere-dark-gray">
             {gapCount}
           </p>
-          <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mt-1">
+          <p className="text-xs font-normal text-gray-500 mt-1.5">
             Gaps found
           </p>
         </CardContent>
       </Card>
-      <Card className="border-gray-200/90 bg-gray-100/80 shadow-none">
-        <CardContent className="p-5 text-center">
-          <p className="text-3xl font-semibold tabular-nums text-prisere-mustard">
+      <Card className="border-gray-200/90 bg-gray-100/80 shadow-none py-0 gap-0">
+        <CardContent className="px-5 py-4 text-center">
+          <p className="text-3xl font-semibold tabular-nums leading-none text-prisere-dark-gray">
             {locationCount}
           </p>
-          <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mt-1">
+          <p className="text-xs font-normal text-gray-500 mt-1.5">
             Location{locationCount !== 1 ? "s" : ""}
           </p>
         </CardContent>
       </Card>
-      <Card className="border-gray-200/90 bg-gray-100/80 shadow-none sm:col-span-1 col-span-1">
-        <CardContent className="p-5 text-center">
+      <Card className="border-gray-200/90 bg-gray-100/80 shadow-none sm:col-span-1 col-span-1 py-0 gap-0">
+        <CardContent className="px-5 py-4 text-center">
           <p
             className={cn(
-              "text-3xl font-semibold tabular-nums leading-tight min-h-[2.25rem] flex items-center justify-center",
+              "text-3xl font-semibold tabular-nums leading-none flex items-center justify-center",
               exStyle.top
             )}
           >
             {expiry.topText}
           </p>
-          <p
-            className="text-xs font-medium text-gray-500 uppercase tracking-wide"
-          >
+          <p className="text-xs font-normal text-gray-500 mt-1.5">
             {expiry.bottomLabel}
           </p>
         </CardContent>
