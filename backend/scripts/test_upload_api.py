@@ -56,17 +56,17 @@ def test_upload_endpoints():
             print(f"   Status: {verify_response.status_code}")
             
             if verify_response.status_code == 404:
-                print(f"   ✅ Expected 404 (file not uploaded yet)")
+                print(f"Expected 404 (file not uploaded yet)")
             else:
                 print(f"   Response: {verify_response.json()}")
             print()
             
         else:
-            print(f"   ❌ Failed: {response.text}")
+            print(f"Failed: {response.text}")
             print()
     
     except Exception as e:
-        print(f"   ❌ Error: {e}")
+        print(f"Error: {e}")
         print()
     
     # Test 3: Invalid file type

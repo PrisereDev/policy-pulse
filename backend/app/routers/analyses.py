@@ -33,13 +33,15 @@ import requests
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/v1/analyses", tags=["analyses"])
+
+#could create a seperate file later for this for refactoring
 NFHL_URL = "https://hazards.fema.gov/arcgis/rest/services/public/NFHL/MapServer/28/query"
 GEOCODER = "https://geocode.arcgis.com/arcgis/rest/services/World/GeocodeServer/findAddressCandidates"
 
 LEARN_MORE_URL = "https://agents.floodsmart.gov/articles/flood-maps-and-zones"
 
 # ---------------------------
-# Geocode Address
+# Geocode Address, simple request search based on address
 # ---------------------------
 def geocode(address):
     params = {
