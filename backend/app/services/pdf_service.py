@@ -8,12 +8,36 @@ import io
 # Use pypdf instead of PyPDF2 (pypdf is the modern maintained version)
 from pypdf import PdfReader
 
+from pdfalyzer.pdfalyzer import Pdfalyzer
+from yaralyzer.yaralyzer import Yaralyzer
+from anytree import PreOrderIter
+
+
 logger = logging.getLogger(__name__)
 
 
 class PDFService:
     """Service for processing PDF files."""
-    
+    def analyze_pdf_from_bytes(pdf_bytes):
+        pdf_file_object = io.BytesIO(pdf_bytes)
+        logger.info("[*] Checking PDF for malicious content...")
+        try:
+            # 2. Pass the file object to Pdfalyzer
+            analyzer = Pdfalyzer(pdf_file_object)
+            pdf_tree = analyzer.pdf_tree
+            
+            # 3. Check Malicious Tags
+            suspicious_tags = ['/JS', '/JavaScript', '/OpenAction', '/Launch']
+            
+            for node in PreOrderIter(pdf_tree):
+                if hasattr(node, 'reference_key') and node.reference_key in suspicious_tags:
+                    logger.info(f"[!] Found Suspicious Tag: {node.reference_key}")
+                    if hasattr(node, 'blob'):
+                        logger.info(f"    -> Preview: {node.blob[:50]}...")
+                    raise Exception("PDF is malicious (test)")
+        except Exception as e:
+            print(f"[-] Failed to analyze bytes: {e}")
+
     def extract_text_from_bytes(self, pdf_bytes: bytes) -> str:
         """
         Extract text content from PDF bytes.
@@ -67,8 +91,9 @@ class PDFService:
             dict: Metadata including page_count, title, author, etc.
             
         Raises:
-            Exception: If PDF is corrupted or cannot be read
+            Exception: If PDF is corrupted or cannot be read, is malicious
         """
+            
         try:
             # Create a file-like object from bytes
             pdf_file = io.BytesIO(pdf_bytes)
@@ -102,6 +127,7 @@ class PDFService:
             
             logger.info(f"Successfully extracted PDF metadata: {metadata['page_count']} pages")
             
+
             return metadata
             
         except Exception as e:

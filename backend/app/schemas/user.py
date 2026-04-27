@@ -5,7 +5,7 @@ from datetime import datetime
 
 class UserBase(BaseModel):
     """Base user schema with common fields."""
-    email: EmailStr
+    email: EmailStr 
     name: Optional[str] = None
     company_name: Optional[str] = None
 

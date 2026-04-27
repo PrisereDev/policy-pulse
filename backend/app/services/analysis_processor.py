@@ -89,6 +89,7 @@ class AnalysisProcessor:
                 job.update_progress(30, "Extracting text from baseline policy...")
                 db.commit()
             
+            
             baseline_result = pdf_service.extract_text_with_metadata(baseline_bytes)
             baseline_text = baseline_result['text']
             baseline_metadata = baseline_result['metadata']

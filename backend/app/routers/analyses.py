@@ -34,7 +34,7 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/v1/analyses", tags=["analyses"])
 
-#could create a seperate file later for this for refactoring
+#could create a seperate file later for this for refactoring, if another intern is looking at this please move this to another file
 NFHL_URL = "https://hazards.fema.gov/arcgis/rest/services/public/NFHL/MapServer/28/query"
 GEOCODER = "https://geocode.arcgis.com/arcgis/rest/services/World/GeocodeServer/findAddressCandidates"
 
