@@ -113,14 +113,11 @@ async def root():
 
 
 # Import and include routers
-# Auth router disabled for testing without Clerk keys
-# from app.routers import auth
-# app.include_router(auth.router)
-
-# Upload router (no auth required for testing)
-from app.routers import uploads, analyses
+from app.routers import analyses, auth, uploads, webhooks
+app.include_router(auth.router)
 app.include_router(uploads.router)
 app.include_router(analyses.router)
+app.include_router(webhooks.router)
 
 
 @app.on_event("startup")
@@ -137,12 +134,21 @@ async def startup_event():
     logger.info("=" * 60)
 
 
+@app.on_event("shutdown")
+async def shutdown_event():
+    """Close shared HTTP clients."""
+    from app.utils.clerk_auth import close_clerk_http_client
+
+    await close_clerk_http_client()
+
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(
         "app.main:app",
         host="0.0.0.0",
         port=settings.port,
-        reload=settings.environment == "development"
+        reload=settings.environment == "development",
+        reload_dirs=["app"] if settings.environment == "development" else None,
     )
 

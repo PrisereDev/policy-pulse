@@ -1,10 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@clerk/nextjs";
-import { useCreateAnalysis } from "@/hooks/use-analysis";
-import { Logo } from "@/components/brand/logo";
+import {
+  CREATE_ANALYSIS_PROGRESS_LABELS,
+  useCreateAnalysis,
+  type CreateAnalysisProgressStep,
+} from "@/hooks/use-analysis";
+import { AppLogoWithBusiness } from "@/components/brand/app-logo-with-business";
 import { PageHeader } from "@/components/brand/page-header";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -14,32 +18,45 @@ import Link from "next/link";
 import { ArrowLeft, ArrowRight } from "lucide-react";
 
 export default function UploadPage() {
-  const { isLoaded, userId } = useAuth();
+  const { isLoaded, isSignedIn } = useAuth();
   const router = useRouter();
   const [baselineFile, setBaselineFile] = useState<File | null>(null);
   const [renewalFile, setRenewalFile] = useState<File | null>(null);
-  
+  const [startAnalysisStep, setStartAnalysisStep] =
+    useState<CreateAnalysisProgressStep | null>(null);
+
   const createAnalysisMutation = useCreateAnalysis();
 
-  // Redirect if not authenticated
-  if (isLoaded && !userId) {
-    router.push("/sign-in");
-    return null;
+  useEffect(() => {
+    if (isLoaded && isSignedIn === false) {
+      router.replace("/sign-in");
+    }
+  }, [isLoaded, isSignedIn, router]);
+
+  if (!isLoaded || isSignedIn !== true) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-prisere-maroon" />
+      </div>
+    );
   }
 
   const handleStartAnalysis = async () => {
     if (!baselineFile || !renewalFile) return;
-    
+
     try {
       const result = await createAnalysisMutation.mutateAsync({
         baselineFile,
         renewalFile,
+        onProgress: setStartAnalysisStep,
       });
-      
+
       router.push(`/analysis/${result.job_id}`);
     } catch (error) {
       console.error("Failed to start analysis:", error);
       // Error handling will be shown by React Query error boundary
+    } finally {
+      setStartAnalysisStep(null);
     }
   };
 
@@ -50,7 +67,7 @@ export default function UploadPage() {
       {/* Header */}
       <header className="border-b bg-white px-6 py-4">
         <div className="flex items-center justify-between max-w-7xl mx-auto">
-          <Logo />
+          <AppLogoWithBusiness />
           <UserButton afterSignOutUrl="/" />
         </div>
       </header>
@@ -115,26 +132,36 @@ export default function UploadPage() {
         </Card>
 
         {/* Action Buttons */}
-        <div className="flex justify-between">
+        <div className="flex justify-between items-start gap-4">
           <Link href="/dashboard">
             <Button variant="outline">
               Cancel
             </Button>
           </Link>
-          <Button 
-            onClick={handleStartAnalysis}
-            disabled={!canProceed || createAnalysisMutation.isPending}
-            className="bg-prisere-maroon hover:bg-prisere-maroon/90 disabled:opacity-50"
-          >
-            {createAnalysisMutation.isPending ? (
-              <>Processing...</>
-            ) : (
-              <>
-                Start Analysis
-                <ArrowRight className="ml-2 h-4 w-4" />
-              </>
-            )}
-          </Button>
+          <div className="flex flex-col items-end gap-2">
+            <Button
+              onClick={handleStartAnalysis}
+              disabled={!canProceed || createAnalysisMutation.isPending}
+              className="bg-prisere-maroon hover:bg-prisere-maroon/90 disabled:opacity-50"
+            >
+              {createAnalysisMutation.isPending ? (
+                <>Processing...</>
+              ) : (
+                <>
+                  Start Analysis
+                  <ArrowRight className="ml-2 h-4 w-4" />
+                </>
+              )}
+            </Button>
+            {createAnalysisMutation.isPending && startAnalysisStep !== null ? (
+              <p
+                className="text-sm text-gray-600 text-right max-w-xs"
+                style={{ fontFamily: "var(--font-body)" }}
+              >
+                {CREATE_ANALYSIS_PROGRESS_LABELS[startAnalysisStep]}
+              </p>
+            ) : null}
+          </div>
         </div>
       </main>
     </div>

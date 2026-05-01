@@ -1,71 +1,129 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { analysisApi } from "@/lib/api";
+import { useAuth } from "@clerk/nextjs";
+import { analysisApi, ApiError } from "@/lib/api";
 import { AnalysisJob } from "@/types/api";
+import { isUnauthorizedApiError } from "@/lib/auth-api-errors";
+import { getBackendAuthToken } from "@/lib/clerk-backend-token";
+import { useAuthApiFailureHandler } from "@/hooks/use-auth-api-failure";
 
 export const ANALYSIS_QUERY_KEYS = {
-  all: ["analysis"] as const,
-  status: (jobId: string) => [...ANALYSIS_QUERY_KEYS.all, "status", jobId] as const,
-  result: (jobId: string) => [...ANALYSIS_QUERY_KEYS.all, "result", jobId] as const,
-  history: () => [...ANALYSIS_QUERY_KEYS.all, "history"] as const,
+  /** Scope all keys by Clerk user id — required so caches never leak across sign-out / account switch. */
+  root: (userId: string | null | undefined) =>
+    ["analysis", userId ?? "__signed_out__"] as const,
+  status: (userId: string | null | undefined, jobId: string) =>
+    [...ANALYSIS_QUERY_KEYS.root(userId), "status", jobId] as const,
+  result: (userId: string | null | undefined, jobId: string) =>
+    [...ANALYSIS_QUERY_KEYS.root(userId), "result", jobId] as const,
+  gapResult: (userId: string | null | undefined, jobId: string) =>
+    [...ANALYSIS_QUERY_KEYS.root(userId), "gap-result", jobId] as const,
+  history: (userId: string | null | undefined) =>
+    [...ANALYSIS_QUERY_KEYS.root(userId), "history"] as const,
 };
 
-// Create analysis mutation (two-step: upload files, then create analysis)
+/** Sub-steps while starting a renewal comparison (upload + create job). */
+export type CreateAnalysisProgressStep =
+  | "uploading_baseline"
+  | "uploading_renewal"
+  | "creating_job";
+
+export const CREATE_ANALYSIS_PROGRESS_LABELS: Record<
+  CreateAnalysisProgressStep,
+  string
+> = {
+  uploading_baseline: "Uploading current policy...",
+  uploading_renewal: "Uploading renewal policy...",
+  creating_job: "Starting your comparison…",
+};
+
 export function useCreateAnalysis() {
   const queryClient = useQueryClient();
+  const { getToken, userId } = useAuth();
+  const onAuthFailure = useAuthApiFailureHandler();
 
   return useMutation({
     mutationFn: async ({
       baselineFile,
       renewalFile,
       metadata,
+      onProgress,
     }: {
       baselineFile: File;
       renewalFile: File;
       metadata?: { company_name?: string; policy_type?: string };
+      /** UX only: called as each sub-step begins (same order as before). */
+      onProgress?: (step: CreateAnalysisProgressStep) => void;
     }) => {
-      // Step 1: Upload files to S3 and get S3 keys
-      const { baseline_s3_key, renewal_s3_key } = await analysisApi.uploadFiles(
-        baselineFile,
-        renewalFile
-      );
+      try {
+        onProgress?.("uploading_baseline");
+        const uploadToken = await getBackendAuthToken(getToken);
+        const { baseline_s3_key, renewal_s3_key } = await analysisApi.uploadFiles(
+          baselineFile,
+          renewalFile,
+          uploadToken,
+          {
+            onAfterBaselineUpload: () => onProgress?.("uploading_renewal"),
+          }
+        );
 
-      // Step 2: Create analysis job with S3 keys
-      return analysisApi.createAnalysis(
-        baseline_s3_key,
-        renewal_s3_key,
-        metadata
-      );
+        onProgress?.("creating_job");
+        const createToken = await getBackendAuthToken(getToken);
+        return analysisApi.createAnalysis(
+          baseline_s3_key,
+          renewal_s3_key,
+          metadata,
+          createToken
+        );
+      } catch (e) {
+        await onAuthFailure(e);
+        throw e;
+      }
     },
     onSuccess: (data: AnalysisJob) => {
-      // Cache the new job status
       queryClient.setQueryData(
-        ANALYSIS_QUERY_KEYS.status(data.job_id),
+        ANALYSIS_QUERY_KEYS.status(userId, data.job_id),
         data
       );
-      // Invalidate history to refetch
-      queryClient.invalidateQueries({
-        queryKey: ANALYSIS_QUERY_KEYS.history(),
+      /** Do not await — `mutateAsync` must resolve as soon as the job exists so the UI can navigate immediately. */
+      void queryClient.invalidateQueries({
+        queryKey: ANALYSIS_QUERY_KEYS.root(userId),
+        refetchType: "active",
       });
     },
   });
 }
 
-// Get analysis status with polling
 export function useAnalysisStatus(jobId: string, enabled = true) {
+  const { getToken, userId, isLoaded, isSignedIn } = useAuth();
+  const authReady =
+    isLoaded && isSignedIn === true && !!userId;
+  const onAuthFailure = useAuthApiFailureHandler();
+
   return useQuery({
-    queryKey: ANALYSIS_QUERY_KEYS.status(jobId),
-    queryFn: () => analysisApi.getAnalysisStatus(jobId),
-    enabled: enabled && !!jobId,
+    queryKey: ANALYSIS_QUERY_KEYS.status(userId, jobId),
+    queryFn: async () => {
+      try {
+        const token = await getBackendAuthToken(getToken);
+        return analysisApi.getAnalysisStatus(jobId, token);
+      } catch (e) {
+        await onAuthFailure(e);
+        throw e;
+      }
+    },
+    /** Wait for a fully signed-in session so getToken() is valid. */
+    enabled: enabled && !!jobId && authReady,
     refetchInterval: (query) => {
+      if (query.state.error && isUnauthorizedApiError(query.state.error)) {
+        return false;
+      }
       const status = query.state.data?.status;
-      
+
       // Stop polling only when we reach a terminal state
       if (status === "completed" || status === "failed") {
         return false;
       }
-      
+
       // Keep polling for pending, processing, or any other state
       return 3000;
     },
@@ -73,23 +131,145 @@ export function useAnalysisStatus(jobId: string, enabled = true) {
   });
 }
 
-// Get analysis result
 export function useAnalysisResult(jobId: string, enabled = true, poll = false) {
+  const { getToken, userId, isLoaded, isSignedIn } = useAuth();
+  const authReady =
+    isLoaded && isSignedIn === true && !!userId;
+  const onAuthFailure = useAuthApiFailureHandler();
+
   return useQuery({
-    queryKey: ANALYSIS_QUERY_KEYS.result(jobId),
-    queryFn: () => analysisApi.getAnalysisResult(jobId),
-    enabled: enabled && !!jobId,
+    queryKey: ANALYSIS_QUERY_KEYS.result(userId, jobId),
+    queryFn: async () => {
+      try {
+        const token = await getBackendAuthToken(getToken);
+        return analysisApi.getAnalysisResult(jobId, token);
+      } catch (e) {
+        await onAuthFailure(e);
+        throw e;
+      }
+    },
+    enabled: enabled && !!jobId && authReady,
     staleTime: 5 * 60 * 1000, // Results are stable for 5 minutes
-    refetchInterval: poll ? 2000 : false, // Poll every 2 seconds when poll is true
-    retry: poll ? 3 : false, // Retry failed requests when polling
+    refetchInterval: (query) => {
+      if (query.state.error && isUnauthorizedApiError(query.state.error)) {
+        return false;
+      }
+      return poll ? 2000 : false;
+    },
+    retry: (failureCount, error: unknown) => {
+      if (error instanceof ApiError && error.status === 401) return false;
+      if (!poll) return false;
+      return failureCount < 3;
+    },
   });
 }
 
-// Get analysis history
 export function useAnalysisHistory() {
+  const { getToken, userId, isLoaded, isSignedIn } = useAuth();
+  const authReady =
+    isLoaded && isSignedIn === true && !!userId;
+  const onAuthFailure = useAuthApiFailureHandler();
+
   return useQuery({
-    queryKey: ANALYSIS_QUERY_KEYS.history(),
-    queryFn: () => analysisApi.getAnalysisHistory(),
+    queryKey: ANALYSIS_QUERY_KEYS.history(userId),
+    queryFn: async () => {
+      try {
+        const token = await getBackendAuthToken(getToken);
+        return analysisApi.getAnalysisHistory(token);
+      } catch (e) {
+        await onAuthFailure(e);
+        throw e;
+      }
+    },
+    enabled: authReady,
     staleTime: 60 * 1000, // History is stable for 1 minute
+  });
+}
+
+export function useCreateGapAnalysis() {
+  const queryClient = useQueryClient();
+  const { getToken, userId } = useAuth();
+  const onAuthFailure = useAuthApiFailureHandler();
+
+  return useMutation({
+    mutationFn: async ({
+      policyFile,
+      riskProfile,
+      businessLocations,
+    }: {
+      policyFile: File;
+      riskProfile: Record<string, unknown>;
+      businessLocations?: Array<{ address: string; isPrimary: boolean }>;
+    }) => {
+      try {
+        const uploadToken = await getBackendAuthToken(getToken);
+        const s3Key = await analysisApi.uploadSingleFile(policyFile, uploadToken);
+
+        const createToken = await getBackendAuthToken(getToken);
+        return analysisApi.createGapAnalysis(
+          s3Key,
+          riskProfile,
+          createToken,
+          businessLocations
+        );
+      } catch (e) {
+        await onAuthFailure(e);
+        throw e;
+      }
+    },
+    onSuccess: (data: AnalysisJob) => {
+      queryClient.setQueryData(
+        ANALYSIS_QUERY_KEYS.status(userId, data.job_id),
+        data
+      );
+      void queryClient.invalidateQueries({
+        queryKey: ANALYSIS_QUERY_KEYS.root(userId),
+        refetchType: "active",
+      });
+    },
+  });
+}
+
+export function useGapAnalysisResult(
+  jobId: string,
+  enabled = true,
+  /** Poll and retry until the gap result exists (analysis page + dashboard right after redirect). */
+  pollUntilLoaded = false
+) {
+  const { getToken, userId, isLoaded, isSignedIn } = useAuth();
+  const authReady =
+    isLoaded && isSignedIn === true && !!userId;
+  const onAuthFailure = useAuthApiFailureHandler();
+
+  return useQuery({
+    queryKey: ANALYSIS_QUERY_KEYS.gapResult(userId, jobId),
+    queryFn: async () => {
+      try {
+        const token = await getBackendAuthToken(getToken);
+        return analysisApi.getGapAnalysisResult(jobId, token);
+      } catch (e) {
+        await onAuthFailure(e);
+        throw e;
+      }
+    },
+    enabled: enabled && !!jobId && authReady,
+    staleTime: 5 * 60 * 1000,
+    refetchInterval: (query) => {
+      if (query.state.error && isUnauthorizedApiError(query.state.error)) {
+        return false;
+      }
+      if (!pollUntilLoaded || !enabled || !jobId) return false;
+      if (query.state.data) return false;
+      return 2000;
+    },
+    retry: (failureCount, error: unknown) => {
+      if (error instanceof ApiError && error.status === 401) return false;
+      const status =
+        error instanceof ApiError ? error.status : undefined;
+      if (status === 404 && failureCount < 12) return true;
+      return failureCount < 4;
+    },
+    retryDelay: (attemptIndex) =>
+      Math.min(500 * 2 ** attemptIndex, 8000),
   });
 }

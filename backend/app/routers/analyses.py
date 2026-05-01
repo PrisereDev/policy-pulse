@@ -6,9 +6,10 @@ from fastapi.responses import JSONResponse
 
 from pydantic import ValidationError
 from sqlalchemy.orm import Session
-from typing import List
+from typing import List, Optional, Tuple
 import logging
 import asyncio
+import time
 
 from app.database import get_db
 from app.models.user import User
@@ -21,11 +22,14 @@ from app.schemas.analysis import (
     AnalysisJobResponse,
     AnalysisResultResponse,
     AnalysisListItem,
+    GapAnalysisCreateRequest,
+    GapAnalysisResultResponse,
+    CoverageGapItem,
 )
 from app.services.s3_service import s3_service
 from app.services.analysis_processor import analysis_processor
-from backend.app.schemas.data import Datum
-# from app.utils.clerk_auth import get_current_user
+from app.schemas.data import Datum
+from app.utils.clerk_auth import get_current_user
 
 import requests
 
@@ -195,34 +199,20 @@ def lookup(address):
         }
 
 
-# TODO: Re-enable authentication when Clerk keys are available
-# For now, using mock user for testing
-def get_mock_user():
-    """Mock user for testing without Clerk authentication."""
-    from app.models.user import User
-    user = User()
-    user.id = "test_user_123"
-    user.email = "test@example.com"
-    user.name = "Test User"
-    return user
-
-
 @router.post("", response_model=AnalysisJobResponse, status_code=status.HTTP_201_CREATED)
 async def create_analysis(
     request: AnalysisCreateRequest,
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
-    # user: User = Depends(get_current_user)  # TODO: Enable when Clerk keys available
-    user: User = Depends(get_mock_user)  # Temporary for testing
+    user: User = Depends(get_current_user),
 ):
     """
     Create a new analysis job.
     
     This endpoint:
-    1. Validates that both PDFs exist in S3
-    2. Creates a job record in the database
-    3. Returns the job_id immediately
-    4. Starts background processing asynchronously
+    1. Creates a job record in the database
+    2. Returns the job_id immediately
+    3. Starts background processing asynchronously
     
     The client should poll GET /analyses/{job_id}/status to check progress.
     
@@ -239,21 +229,6 @@ async def create_analysis(
         logger.info(f"Creating analysis job for user: {user.id}")
         logger.info(f"Baseline S3 key: {request.baseline_s3_key}")
         logger.info(f"Renewal S3 key: {request.renewal_s3_key}")
-        
-        # Validate that both files exist in S3
-        if not s3_service.file_exists(request.baseline_s3_key):
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Baseline file not found in S3: {request.baseline_s3_key}"
-            )
-        
-        if not s3_service.file_exists(request.renewal_s3_key):
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Renewal file not found in S3: {request.renewal_s3_key}"
-            )
-        
-        logger.info("Both PDF files verified in S3")
         
         # Extract filenames from S3 keys
         baseline_filename = request.baseline_s3_key.split('/')[-1]
@@ -272,11 +247,15 @@ async def create_analysis(
             progress=0,
             status_message="Job created, waiting to start..."
         )
-        
+
+        t_analysis_job_db = time.perf_counter()  # TEMP timing
         db.add(job)
         db.commit()
         db.refresh(job)
-        
+        logger.info(
+            f"[TIMING] create_analysis AnalysisJob add+commit+refresh: {time.perf_counter() - t_analysis_job_db:.3f}s"
+        )  # TEMP
+
         logger.info(f"Created analysis job: {job.id}")
         
         # Start background processing
@@ -306,6 +285,78 @@ async def create_analysis(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to create analysis job"
         )
+
+@router.post("/gap", response_model=AnalysisJobResponse, status_code=status.HTTP_201_CREATED)
+async def create_gap_analysis(
+    request: GapAnalysisCreateRequest,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """
+    Create a gap analysis job for a single policy + risk profile.
+
+    Returns a job_id immediately; the client polls GET /{job_id}/status for progress
+    and retrieves results via GET /{job_id}/gap-result when completed.
+    """
+    try:
+        logger.info(f"Creating gap analysis job for user: {user.id}")
+
+        if not s3_service.file_exists(request.policy_s3_key):
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Policy file not found in S3: {request.policy_s3_key}",
+            )
+
+        policy_filename = request.policy_s3_key.split("/")[-1]
+
+        risk_data = dict(request.risk_profile)
+        if request.business_locations:
+            risk_data["business_locations"] = [
+                loc.model_dump() for loc in request.business_locations
+            ]
+
+        job = AnalysisJob(
+            user_id=user.id,
+            job_type="gap_analysis",
+            status=JobStatus.PENDING,
+            baseline_s3_key=request.policy_s3_key,
+            baseline_filename=policy_filename,
+            risk_profile_data=risk_data,
+            progress=0,
+            status_message="Gap analysis job created, waiting to start...",
+        )
+
+        db.add(job)
+        db.commit()
+        db.refresh(job)
+
+        logger.info(f"Created gap analysis job: {job.id}")
+
+        background_tasks.add_task(analysis_processor.process_gap_analysis_job, job.id)
+
+        return AnalysisJobResponse(
+            job_id=job.id,
+            status=job.status.value,
+            created_at=job.created_at,
+            updated_at=job.updated_at,
+            baseline_filename=job.baseline_filename,
+            renewal_filename=job.renewal_filename or "",
+            progress=job.progress,
+            message=job.status_message,
+            estimated_completion_time=job._estimate_completion_time(),
+            error_message=None,
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to create gap analysis job: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to create gap analysis job",
+        )
+
 
 @router.post("/assessment/")
 async def get_data_points(request_json: dict):
@@ -357,8 +408,7 @@ async def get_data_points(request_json: dict):
 async def get_analysis_status(
     job_id: str = Path(..., description="Analysis job ID"),
     db: Session = Depends(get_db),
-    # user: User = Depends(get_current_user)  # TODO: Enable when Clerk keys available
-    user: User = Depends(get_mock_user)  # Temporary for testing
+    user: User = Depends(get_current_user),
 ):
     """
     Get current status and progress of an analysis job.
@@ -414,8 +464,7 @@ async def get_analysis_status(
 async def get_analysis_result(
     job_id: str = Path(..., description="Analysis job ID"),
     db: Session = Depends(get_db),
-    # user: User = Depends(get_current_user)  # TODO: Enable when Clerk keys available
-    user: User = Depends(get_mock_user)  # Temporary for testing
+    user: User = Depends(get_current_user),
 ):
     """
     Get full analysis results (only available when job is completed).
@@ -486,11 +535,92 @@ async def get_analysis_result(
         )
 
 
+@router.get("/{job_id}/gap-result", response_model=GapAnalysisResultResponse)
+async def get_gap_analysis_result(
+    job_id: str = Path(..., description="Analysis job ID"),
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """
+    Get gap analysis results (only available when job is completed).
+    """
+    try:
+        job = db.query(AnalysisJob).filter(
+            AnalysisJob.id == job_id,
+            AnalysisJob.user_id == user.id,
+        ).first()
+
+        if not job:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Analysis job not found: {job_id}",
+            )
+
+        if job.status != JobStatus.COMPLETED:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Analysis is not completed yet. Current status: {job.status.value}",
+            )
+
+        result = db.query(AnalysisResult).filter(
+            AnalysisResult.job_id == job_id,
+        ).first()
+
+        if not result:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Gap analysis result not found",
+            )
+
+        raw_gaps = result.changes or []
+        gaps: list[CoverageGapItem] = []
+        for g in raw_gaps:
+            if not isinstance(g, dict):
+                continue
+            gaps.append(
+                CoverageGapItem(
+                    type=str(g.get("type") or "unknown"),
+                    status=str(g.get("status") or "not_covered"),
+                    title=str(g.get("title") or ""),
+                    explanation=str(g.get("explanation") or ""),
+                    affected_locations=g.get("affected_locations")
+                    if isinstance(g.get("affected_locations"), list)
+                    else None,
+                )
+            )
+        recommendations = [a.get("action", "") for a in (result.suggested_actions or [])]
+
+        business_name, policy_expiration_date = _gap_policy_metadata_from_result(result)
+
+        return GapAnalysisResultResponse(
+            job_id=result.job_id,
+            status="completed",
+            gaps=gaps,
+            business_name=business_name,
+            policy_expiration_date=policy_expiration_date,
+            summary=f"Found {len(gaps)} coverage gap(s) with {len(recommendations)} endorsement recommendation(s).",
+            recommendations=recommendations,
+            metadata={
+                "model_version": result.model_version or "unknown",
+                "processing_time_seconds": result.processing_time_seconds,
+                "completed_at": result.created_at.isoformat() if result.created_at else None,
+            },
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to get gap analysis result: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to get gap analysis result",
+        )
+
+
 @router.get("", response_model=List[AnalysisListItem])
 async def list_analyses(
     db: Session = Depends(get_db),
-    # user: User = Depends(get_current_user)  # TODO: Enable when Clerk keys available
-    user: User = Depends(get_mock_user)  # Temporary for testing
+    user: User = Depends(get_current_user),
 ):
     """
     List all analysis jobs for the current user.
@@ -517,7 +647,15 @@ async def list_analyses(
             total_changes = None
             if job.status == JobStatus.COMPLETED and job.result:
                 total_changes = job.result.total_changes
-            
+
+            gap_business_name = None
+            if (
+                job.job_type == "gap_analysis"
+                and job.status == JobStatus.COMPLETED
+                and job.result
+            ):
+                gap_business_name, _ = _gap_policy_metadata_from_result(job.result)
+
             result.append(AnalysisListItem(
                 job_id=job.id,
                 status=job.status.value,
@@ -526,7 +664,8 @@ async def list_analyses(
                 baseline_filename=job.baseline_filename,
                 renewal_filename=job.renewal_filename,
                 total_changes=total_changes,
-                company_name=job.metadata_company_name
+                company_name=job.metadata_company_name,
+                business_name=gap_business_name,
             ))
         
         return result
@@ -543,8 +682,7 @@ async def list_analyses(
 async def delete_analysis(
     job_id: str = Path(..., description="Analysis job ID"),
     db: Session = Depends(get_db),
-    # user: User = Depends(get_current_user)  # TODO: Enable when Clerk keys available
-    user: User = Depends(get_mock_user)  # Temporary for testing
+    user: User = Depends(get_current_user),
 ):
     """
     Delete an analysis job and its results.

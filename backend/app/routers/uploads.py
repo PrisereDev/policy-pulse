@@ -1,7 +1,7 @@
 """
 Upload router for handling file upload initialization and verification.
 """
-from fastapi import APIRouter, HTTPException, status, Path
+from fastapi import APIRouter, Depends, HTTPException, status, Path
 import logging
 
 from app.services.s3_service import s3_service
@@ -11,6 +11,8 @@ from app.schemas.upload import (
     UploadVerifyResponse
 )
 from app.config import settings
+from app.utils.clerk_auth import get_current_user
+from app.models.user import User
 
 logger = logging.getLogger(__name__)
 
@@ -18,7 +20,10 @@ router = APIRouter(prefix="/v1/uploads", tags=["uploads"])
 
 
 @router.post("/init", response_model=UploadInitResponse, status_code=status.HTTP_200_OK)
-async def initialize_upload(request: UploadInitRequest):
+async def initialize_upload(
+    request: UploadInitRequest,
+    user: User = Depends(get_current_user),
+):
     """
     Initialize file upload by generating presigned S3 upload URL.
     
@@ -36,13 +41,8 @@ async def initialize_upload(request: UploadInitRequest):
         500 Internal Server Error: If S3 URL generation fails
     """
     try:
-        # Generate S3 key for this upload
-        # Using "test_user" as user_id since auth is disabled for testing
-        # TODO: Replace with actual user_id from get_current_user when auth is enabled
-        test_user_id = "test_user_123"
-        
         s3_key = s3_service.generate_s3_key(
-            user_id=test_user_id,
+            user_id=user.id,
             filename=request.filename,
             prefix="uploads"
         )

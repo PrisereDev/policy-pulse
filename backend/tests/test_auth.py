@@ -4,7 +4,7 @@ Note: These are example tests. Actual testing requires mocking Clerk JWKS.
 """
 import pytest
 from fastapi.testclient import TestClient
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch, MagicMock, AsyncMock
 
 from app.main import app
 from app.database import Base, engine, get_db
@@ -39,8 +39,16 @@ MOCK_DECODED_TOKEN = {
 @pytest.fixture
 def mock_clerk_auth():
     """Mock Clerk authentication for testing."""
-    with patch("app.utils.clerk_auth.get_clerk_jwks", return_value=MOCK_JWKS):
-        with patch("app.utils.clerk_auth.verify_clerk_token", return_value=MOCK_DECODED_TOKEN):
+    with patch(
+        "app.utils.clerk_auth.get_clerk_jwks",
+        new_callable=AsyncMock,
+        return_value=MOCK_JWKS,
+    ):
+        with patch(
+            "app.utils.clerk_auth.verify_clerk_token",
+            new_callable=AsyncMock,
+            return_value=MOCK_DECODED_TOKEN,
+        ):
             yield
 
 

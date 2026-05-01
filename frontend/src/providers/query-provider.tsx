@@ -3,6 +3,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
 import { useState } from "react";
+import { AuthSessionSync } from "@/components/auth/auth-session-sync";
 
 interface ErrorWithStatus {
   status?: number;
@@ -16,9 +17,10 @@ export function QueryProvider({ children }: { children: React.ReactNode }) {
           queries: {
             staleTime: 60 * 1000, // 1 minute
             retry: (failureCount, error: unknown) => {
-              // Don't retry on 4xx errors except 408, 429
+              // Don't retry on 4xx errors except 408, 429 (never retry auth failures)
               const errorWithStatus = error as ErrorWithStatus;
               if (errorWithStatus?.status && errorWithStatus.status >= 400 && errorWithStatus.status < 500) {
+                if (errorWithStatus.status === 401) return false;
                 if (errorWithStatus.status === 408 || errorWithStatus.status === 429) {
                   return failureCount < 2;
                 }
@@ -45,6 +47,7 @@ export function QueryProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <QueryClientProvider client={queryClient}>
+      <AuthSessionSync />
       {children}
       <ReactQueryDevtools initialIsOpen={false} />
     </QueryClientProvider>
