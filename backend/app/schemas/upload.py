@@ -6,7 +6,7 @@ from typing import Optional, Dict, Any
 
 
 class UploadInitRequest(BaseModel):
-    """Request schema for initializing file upload."""
+    """Request schema for initializing file upload. Utilizes Pydantic schemas for initializing workflows. """
     file_type: str = Field(
         default="application/pdf",
         description="MIME type of the file to upload"

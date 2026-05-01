@@ -38,26 +38,14 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/v1/analyses", tags=["analyses"])
 
-
-def _gap_policy_metadata_from_result(
-    result: AnalysisResult,
-) -> Tuple[Optional[str], Optional[str]]:
-    """Read named insured + expiry saved during gap analysis (see analysis_processor)."""
-    for e in result.educational_insights or []:
-        if isinstance(e, dict) and e.get("change_type") == "gap_policy_metadata":
-            raw_bn = e.get("business_name")
-            raw_exp = e.get("policy_expiration_date")
-            bn = raw_bn.strip() if isinstance(raw_bn, str) and raw_bn.strip() else None
-            exp = raw_exp.strip() if isinstance(raw_exp, str) and raw_exp.strip() else None
-            return bn, exp
-    return None, None
+#could create a seperate file later for this for refactoring, if another intern is looking at this please move this to another file
 NFHL_URL = "https://hazards.fema.gov/arcgis/rest/services/public/NFHL/MapServer/28/query"
 GEOCODER = "https://geocode.arcgis.com/arcgis/rest/services/World/GeocodeServer/findAddressCandidates"
 
 LEARN_MORE_URL = "https://agents.floodsmart.gov/articles/flood-maps-and-zones"
 
 # ---------------------------
-# Geocode Address
+# Geocode Address, simple request search based on address
 # ---------------------------
 def geocode(address):
     params = {

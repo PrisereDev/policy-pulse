@@ -121,7 +121,7 @@ class AnalysisResult(Base):
         # Extract data from Claude response (use correct field names from Claude prompt)
         coverage_changes = claude_data.get("coverage_changes", [])
         
-        # Build change_categories by counting changes per category
+        # Build change_categories by counting changes per category, depending
         change_categories = {}
         for change in coverage_changes:
             category = change.get("category", "other")
