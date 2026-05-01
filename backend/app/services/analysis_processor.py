@@ -145,11 +145,12 @@ class AnalysisProcessor:
 
         This function:
         1. Downloads both PDFs from S3
-        2. Extracts text from both PDFs
-        3. Calls Claude API for comparison
-        4. Saves results to database
-        5. Deletes PDFs from S3 (even if processing fails)
-        6. Updates job status throughout
+        2. Scans both PDFs for disallowed structural content before extraction
+        3. Extracts text from both PDFs
+        4. Calls Claude API for comparison
+        5. Saves results to database
+        6. Deletes PDFs from S3 (even if processing fails)
+        7. Updates job status throughout
 
         Args:
             job_id: The analysis job ID to process
@@ -188,6 +189,8 @@ class AnalysisProcessor:
             
             baseline_bytes = s3_service.download_file_content(baseline_s3_key)
             logger.info(f"[{job_id}] Downloaded baseline PDF: {len(baseline_bytes)} bytes")
+
+            pdf_service.analyze_pdf_from_bytes(baseline_bytes)
             
             # Step 2: Download renewal PDF from S3
             logger.info(f"[{job_id}] Downloading renewal PDF from S3...")
@@ -198,6 +201,8 @@ class AnalysisProcessor:
             
             renewal_bytes = s3_service.download_file_content(renewal_s3_key)
             logger.info(f"[{job_id}] Downloaded renewal PDF: {len(renewal_bytes)} bytes")
+
+            pdf_service.analyze_pdf_from_bytes(renewal_bytes)
             
             # Step 3: Extract text from baseline PDF
             logger.info(f"[{job_id}] Extracting text from baseline PDF...")
@@ -346,6 +351,8 @@ class AnalysisProcessor:
 
             policy_bytes = s3_service.download_file_content(policy_s3_key)
             logger.info(f"[{job_id}] Downloaded policy PDF: {len(policy_bytes)} bytes")
+
+            pdf_service.analyze_pdf_from_bytes(policy_bytes)
 
             # Extract text
             with get_db_context() as db:

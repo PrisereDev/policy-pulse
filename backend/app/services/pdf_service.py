@@ -9,7 +9,6 @@ import io
 from pypdf import PdfReader
 
 from pdfalyzer.pdfalyzer import Pdfalyzer
-from yaralyzer.yaralyzer import Yaralyzer
 from anytree import PreOrderIter
 
 
@@ -18,25 +17,24 @@ logger = logging.getLogger(__name__)
 
 class PDFService:
     """Service for processing PDF files."""
-    def analyze_pdf_from_bytes(pdf_bytes):
+    def analyze_pdf_from_bytes(self, pdf_bytes: bytes) -> None:
         pdf_file_object = io.BytesIO(pdf_bytes)
-        logger.info("[*] Checking PDF for malicious content...")
+        logger.info("Checking PDF for malicious content...")
         try:
-            # 2. Pass the file object to Pdfalyzer
             analyzer = Pdfalyzer(pdf_file_object)
             pdf_tree = analyzer.pdf_tree
-            
-            # 3. Check Malicious Tags
+
             suspicious_tags = ['/JS', '/JavaScript', '/OpenAction', '/Launch']
-            
+
             for node in PreOrderIter(pdf_tree):
                 if hasattr(node, 'reference_key') and node.reference_key in suspicious_tags:
-                    logger.info(f"[!] Found Suspicious Tag: {node.reference_key}")
+                    logger.info("Found suspicious PDF tag: %s", node.reference_key)
                     if hasattr(node, 'blob'):
-                        logger.info(f"    -> Preview: {node.blob[:50]}...")
+                        logger.info("    -> Preview: %s...", str(node.blob)[:50])
                     raise Exception("PDF is malicious (test)")
         except Exception as e:
-            print(f"[-] Failed to analyze bytes: {e}")
+            logger.error("PDF security scan failed: %s", e)
+            raise
 
     def extract_text_from_bytes(self, pdf_bytes: bytes) -> str:
         """
